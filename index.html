@@ -8,11 +8,210 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
-  <link rel="stylesheet" href="css/style.css" />
-</head>
-<body class="landing-page">
+  <style>
+    :root {
+      --green: #1D9E75; --green-light: #E1F5EE; --green-dark: #0F6E56;
+      --coral: #D85A30; --blue: #378ADD;
+      --bg: #F4F3EF; --surface: #FFFFFF; --card-bg: #FFFFFF;
+      --border: rgba(0,0,0,0.1); --border-strong: rgba(0,0,0,0.18);
+      --text: #1a1a18; --text-muted: #6B6A65; --text-faint: #9E9D98;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111110; --surface: #1a1a18; --card-bg: #1f1f1d;
+        --border: rgba(255,255,255,0.1); --border-strong: rgba(255,255,255,0.2);
+        --text: #EEECEA; --text-muted: #9E9D98; --text-faint: #6B6A65;
+      }
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg); color: var(--text);
+      -webkit-font-smoothing: antialiased; min-height: 100vh;
+    }
+    a { color: inherit; }
 
-  <nav class="nav">
+    /* NAV */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: var(--surface); border-bottom: 0.5px solid var(--border);
+      backdrop-filter: blur(12px);
+    }
+    .nav-inner {
+      max-width: 1200px; margin: 0 auto; padding: 16px 32px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); display: inline-block; }
+    .logo-text { font-family: 'Space Mono', monospace; font-size: 15px; font-weight: 700; color: var(--text); }
+    .nav-link {
+      display: flex; align-items: center; gap: 8px; font-size: 13px;
+      color: var(--text-muted); text-decoration: none; padding: 6px 14px;
+      border: 0.5px solid var(--border); border-radius: 20px;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .nav-link:hover { color: var(--text); border-color: var(--border-strong); }
+
+    /* HERO */
+    .hero {
+      max-width: 1200px; margin: 0 auto; padding: 80px 32px 100px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center;
+    }
+    @media (max-width: 900px) {
+      .hero { grid-template-columns: 1fr; gap: 48px; padding: 48px 24px 64px; }
+      .hero-preview { display: none; }
+    }
+    .hero-content { display: flex; flex-direction: column; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 500; color: var(--green-dark);
+      background: var(--green-light); padding: 5px 12px; border-radius: 20px;
+      width: fit-content; margin-bottom: 24px;
+    }
+    .badge-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity:1; transform:scale(1); }
+      50% { opacity:0.6; transform:scale(0.8); }
+    }
+    h1 {
+      font-size: clamp(36px, 5vw, 52px); font-weight: 300; line-height: 1.15;
+      color: var(--text); margin-bottom: 20px; letter-spacing: -1px;
+    }
+    h1 em { font-style: italic; font-weight: 600; color: var(--green); }
+    .hero-sub { font-size: 17px; color: var(--text-muted); line-height: 1.65; margin-bottom: 40px; max-width: 440px; }
+
+    /* CONNECT CARD */
+    .connect-card {
+      background: var(--card-bg); border: 0.5px solid var(--border);
+      border-radius: 16px; padding: 28px 32px; max-width: 440px;
+    }
+    .connect-card-header {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 12px;
+    }
+    .connect-card-header i { color: var(--green); }
+    .connect-hint { font-size: 13px; color: var(--text-muted); line-height: 1.55; margin-bottom: 20px; }
+    .connect-hint a { color: var(--green); text-decoration: none; }
+    .connect-hint a:hover { text-decoration: underline; }
+    .connect-hint strong { color: var(--text); font-weight: 500; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+    .form-group label { font-size: 12px; font-weight: 500; color: var(--text-muted); letter-spacing: 0.04em; }
+    .form-group input {
+      background: var(--bg); border: 0.5px solid var(--border); border-radius: 8px;
+      padding: 10px 14px; font-family: 'Space Mono', monospace; font-size: 14px;
+      color: var(--text); outline: none; transition: border-color 0.15s; width: 100%;
+    }
+    .form-group input:focus { border-color: var(--green); }
+    .form-group input::placeholder { color: var(--text-faint); }
+    .btn-connect {
+      width: 100%; background: var(--green); color: #fff; border: none;
+      border-radius: 8px; padding: 12px 20px; font-family: 'DM Sans', sans-serif;
+      font-size: 15px; font-weight: 500; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: background 0.15s, transform 0.1s; margin-bottom: 14px;
+    }
+    .btn-connect:hover { background: var(--green-dark); }
+    .btn-connect:active { transform: scale(0.99); }
+    .connect-privacy { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-faint); }
+    .connect-privacy i { color: var(--green); }
+
+    /* PREVIEW */
+    .hero-preview { position: relative; }
+    .preview-frame {
+      background: var(--card-bg); border: 0.5px solid var(--border);
+      border-radius: 16px; overflow: hidden; box-shadow: 0 32px 64px rgba(0,0,0,0.1);
+    }
+    .preview-topbar {
+      background: var(--bg); border-bottom: 0.5px solid var(--border);
+      padding: 10px 16px; display: flex; align-items: center; gap: 6px;
+    }
+    .preview-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .preview-url { font-family:'Space Mono',monospace; font-size:11px; color:var(--text-faint); margin-left:8px; }
+    .preview-content { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .p-row { display: flex; gap: 8px; }
+    .p-card { flex:1; padding:12px; border-radius:10px; border:0.5px solid var(--border); border-left-width:3px; }
+    .p-card.p-green { border-left-color: var(--green); }
+    .p-card.p-coral { border-left-color: var(--coral); }
+    .p-card.p-blue  { border-left-color: var(--blue); }
+    .p-card-label { font-size:10px; color:var(--text-muted); margin-bottom:4px; }
+    .p-card-val { font-family:'Space Mono',monospace; font-size:16px; font-weight:700; color:var(--text); margin-bottom:8px; }
+    .p-bar { height:3px; background:var(--bg); border-radius:2px; overflow:hidden; }
+    .p-card.p-green .p-bar div { height:100%; background:var(--green); border-radius:2px; }
+    .p-card.p-coral .p-bar div { height:100%; background:var(--coral); border-radius:2px; }
+    .p-card.p-blue  .p-bar div { height:100%; background:var(--blue); border-radius:2px; }
+    .p-big { flex:1.4; padding:12px; border-radius:10px; border:0.5px solid var(--border); }
+    .p-big-label { font-size:10px; color:var(--text-muted); margin-bottom:4px; }
+    .p-big-val { font-family:'Space Mono',monospace; font-size:24px; font-weight:700; color:var(--text); margin-bottom:10px; }
+    .p-sleep-bar { display:flex; height:8px; border-radius:4px; overflow:hidden; gap:2px; }
+    .p-vitals { flex:1; display:flex; flex-direction:column; gap:6px; }
+    .p-vital {
+      background:var(--bg); border-radius:8px; padding:7px 10px;
+      display:flex; justify-content:space-between; align-items:center;
+    }
+    .p-vital span { font-size:10px; color:var(--text-muted); }
+    .p-vital strong { font-family:'Space Mono',monospace; font-size:11px; font-weight:700; color:var(--text); }
+
+    /* FEATURES */
+    .features { border-top: 0.5px solid var(--border); background: var(--surface); }
+    .features-inner {
+      max-width: 1200px; margin: 0 auto; padding: 64px 32px;
+      display: grid; grid-template-columns: repeat(3,1fr); gap: 48px;
+    }
+    @media (max-width: 700px) { .features-inner { grid-template-columns:1fr; gap:32px; padding:40px 24px; } }
+    .feature { display:flex; flex-direction:column; gap:12px; }
+    .feature-icon {
+      width:44px; height:44px; border-radius:12px; background:var(--green-light);
+      display:flex; align-items:center; justify-content:center; font-size:18px; color:var(--green);
+    }
+    .feature h3 { font-size:16px; font-weight:600; color:var(--text); }
+    .feature p { font-size:14px; color:var(--text-muted); line-height:1.65; }
+
+    /* SETUP MODAL */
+    .modal-overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:200;
+      display:none; align-items:center; justify-content:center; padding:24px;
+    }
+    .modal-overlay.open { display:flex; }
+    .modal {
+      background:var(--surface); border-radius:20px; max-width:560px; width:100%;
+      max-height:90vh; overflow-y:auto; padding:32px 36px;
+      position:relative; box-shadow:0 24px 80px rgba(0,0,0,0.2);
+    }
+    .modal-close {
+      position:absolute; top:16px; right:16px; background:var(--bg);
+      border:none; border-radius:8px; width:32px; height:32px; cursor:pointer;
+      font-size:16px; color:var(--text-muted); display:flex; align-items:center; justify-content:center;
+    }
+    .modal-title { font-family:'Space Mono',monospace; font-size:20px; font-weight:700; color:var(--text); margin-bottom:8px; }
+    .modal-sub { font-size:14px; color:var(--text-muted); line-height:1.6; margin-bottom:32px; }
+    .steps { display:flex; flex-direction:column; gap:24px; }
+    .step { display:flex; gap:16px; }
+    .step-num {
+      width:32px; height:32px; border-radius:50%; background:var(--green); color:#fff;
+      font-family:'Space Mono',monospace; font-weight:700; font-size:13px;
+      display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:2px;
+    }
+    .step-title { font-size:15px; font-weight:600; color:var(--text); margin-bottom:6px; }
+    .step-text { font-size:14px; color:var(--text-muted); line-height:1.65; }
+    .step-text a { color:var(--green); text-decoration:none; }
+    .step-text a:hover { text-decoration:underline; }
+    .step-code {
+      display:inline-block; background:var(--bg); border:0.5px solid var(--border);
+      border-radius:5px; padding:1px 7px; font-family:'Space Mono',monospace; font-size:12px; color:var(--text);
+    }
+    .tip-box {
+      margin-top:28px; background:var(--green-light); border:0.5px solid #9FE1CB;
+      border-radius:12px; padding:16px 20px;
+    }
+    .tip-box p { font-size:13px; color:#085041; line-height:1.6; }
+  </style>
+</head>
+<body>
+
+  <nav>
     <div class="nav-inner">
       <div class="logo">
         <span class="logo-dot"></span>
@@ -30,10 +229,7 @@
         <span class="badge-dot"></span>
         Open source · Free forever
       </div>
-      <h1 class="hero-title">
-        Your Fitbit data,<br />
-        <em>beautifully</em> presented.
-      </h1>
+      <h1>Your Fitbit data,<br /><em>beautifully</em> presented.</h1>
       <p class="hero-sub">
         FitPulse connects to your Fitbit account and shows your health data in a clean, modern dashboard — far better than the default app.
       </p>
@@ -45,13 +241,13 @@
         </div>
         <p class="connect-hint">
           You'll need a free Fitbit developer app to get a <strong>Client ID</strong>. Takes 2 minutes —
-          <a href="setup.html" target="_blank">see setup guide →</a>
+          <a href="#" onclick="document.getElementById('setupModal').classList.add('open'); return false;">see setup guide →</a>
         </p>
         <div class="form-group">
           <label for="clientId">Fitbit Client ID</label>
           <input type="text" id="clientId" placeholder="e.g. 23ABCD" autocomplete="off" spellcheck="false" />
         </div>
-        <button class="btn-connect" id="connectBtn" onclick="startOAuth()">
+        <button class="btn-connect" onclick="startOAuth()">
           <i class="fas fa-link"></i>
           Connect with Fitbit
         </button>
@@ -68,7 +264,7 @@
           <span class="preview-dot" style="background:#ff5f57"></span>
           <span class="preview-dot" style="background:#febc2e"></span>
           <span class="preview-dot" style="background:#28c840"></span>
-          <span class="preview-url">fitpulse.app/dashboard</span>
+          <span class="preview-url">fitpulse · dashboard</span>
         </div>
         <div class="preview-content">
           <div class="p-row">
@@ -108,7 +304,6 @@
           </div>
         </div>
       </div>
-      <div class="preview-glow"></div>
     </div>
   </main>
 
@@ -132,6 +327,102 @@
     </div>
   </section>
 
-  <script src="js/auth.js"></script>
+  <!-- Setup Modal -->
+  <div class="modal-overlay" id="setupModal" onclick="if(event.target===this)this.classList.remove('open')">
+    <div class="modal">
+      <button class="modal-close" onclick="document.getElementById('setupModal').classList.remove('open')">
+        <i class="fas fa-times"></i>
+      </button>
+      <div class="modal-title">Setting up your Fitbit API</div>
+      <p class="modal-sub">Register a free developer app — takes about 2 minutes, no coding required.</p>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div>
+            <div class="step-title">Sign into the Fitbit developer portal</div>
+            <div class="step-text">Go to <a href="https://dev.fitbit.com/apps/new" target="_blank">dev.fitbit.com/apps/new</a> and sign in with your regular Fitbit account.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div>
+            <div class="step-title">Register a new application</div>
+            <div class="step-text">
+              Fill in the form with these values:<br><br>
+              <b>App Name:</b> <span class="step-code">FitPulse</span><br>
+              <b>App Type:</b> <span class="step-code">Personal</span><br>
+              <b>Callback URL:</b> <span class="step-code" id="callbackUrlDisplay">loading…</span><br>
+              <b>Access Type:</b> <span class="step-code">Read Only</span>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div>
+            <div class="step-title">Copy your Client ID</div>
+            <div class="step-text">After registering, copy the <b>OAuth 2.0 Client ID</b> — it looks like <span class="step-code">23ABCD</span>. That's all you need. You do <em>not</em> need the Client Secret.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div>
+            <div class="step-title">Paste it into FitPulse</div>
+            <div class="step-text">Close this dialog, paste your Client ID into the box, and click Connect.</div>
+          </div>
+        </div>
+      </div>
+      <div class="tip-box">
+        <p><strong>Privacy:</strong> FitPulse never stores your data. Your access token lives only in your browser's sessionStorage and is cleared when you disconnect or close the tab.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Show correct callback URL in setup modal
+    document.getElementById('callbackUrlDisplay').textContent =
+      window.location.origin + window.location.pathname.replace('index.html','') + 'dashboard.html';
+
+    // ── OAuth PKCE ──
+    const FITBIT_AUTH_URL = 'https://www.fitbit.com/oauth2/authorize';
+    const SCOPES = 'activity heartrate sleep weight profile nutrition oxygen_saturation temperature respiratory_rate';
+
+    function rand(n) {
+      const c = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+      const a = new Uint8Array(n); crypto.getRandomValues(a);
+      return Array.from(a).map(b => c[b % c.length]).join('');
+    }
+    async function sha256(s) {
+      return crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+    }
+    function b64url(buf) {
+      return btoa(String.fromCharCode(...new Uint8Array(buf)))
+        .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+    }
+
+    async function startOAuth() {
+      const clientId = document.getElementById('clientId').value.trim();
+      if (!clientId) {
+        const inp = document.getElementById('clientId');
+        inp.style.borderColor = '#E24B4A'; inp.focus(); return;
+      }
+      const verifier = rand(64);
+      const challenge = b64url(await sha256(verifier));
+      const state = rand(16);
+
+      sessionStorage.setItem('pkce_verifier', verifier);
+      sessionStorage.setItem('oauth_state', state);
+      sessionStorage.setItem('fitbit_client_id', clientId);
+
+      const redirectUri = window.location.origin + window.location.pathname.replace('index.html','') + 'dashboard.html';
+      sessionStorage.setItem('redirect_uri', redirectUri);
+
+      const params = new URLSearchParams({
+        client_id: clientId, response_type: 'code',
+        code_challenge: challenge, code_challenge_method: 'S256',
+        scope: SCOPES, state, redirect_uri: redirectUri
+      });
+      window.location.href = `${FITBIT_AUTH_URL}?${params}`;
+    }
+  </script>
 </body>
 </html>

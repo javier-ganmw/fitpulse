@@ -8,10 +8,132 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
-  <link rel="stylesheet" href="css/style.css" />
-  <link rel="stylesheet" href="css/dashboard.css" />
+  <style>
+    :root {
+      --green:#1D9E75; --green-light:#E1F5EE; --green-dark:#0F6E56;
+      --coral:#D85A30; --blue:#378ADD; --purple:#7F77DD;
+      --bg:#F4F3EF; --surface:#FFFFFF; --card-bg:#FFFFFF;
+      --border:rgba(0,0,0,0.1); --border-strong:rgba(0,0,0,0.18);
+      --text:#1a1a18; --text-muted:#6B6A65; --text-faint:#9E9D98;
+    }
+    @media (prefers-color-scheme:dark) {
+      :root { --bg:#111110; --surface:#1a1a18; --card-bg:#1f1f1d;
+        --border:rgba(255,255,255,0.1); --border-strong:rgba(255,255,255,0.2);
+        --text:#EEECEA; --text-muted:#9E9D98; --text-faint:#6B6A65; }
+    }
+    body.dark { --bg:#111110; --surface:#1a1a18; --card-bg:#1f1f1d;
+      --border:rgba(255,255,255,0.1); --text:#EEECEA; --text-muted:#9E9D98; --text-faint:#6B6A65; }
+    body.light { --bg:#F4F3EF; --surface:#FFFFFF; --card-bg:#FFFFFF;
+      --border:rgba(0,0,0,0.1); --text:#1a1a18; --text-muted:#6B6A65; --text-faint:#9E9D98; }
+    *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text);
+      -webkit-font-smoothing:antialiased; min-height:100vh; transition:background 0.2s,color 0.2s; }
+
+    /* NAV */
+    .dash-nav { position:sticky; top:0; z-index:100; background:var(--surface); border-bottom:0.5px solid var(--border); }
+    .dash-nav-inner { max-width:1400px; margin:0 auto; padding:12px 24px; display:flex; align-items:center; justify-content:space-between; }
+    .logo { display:flex; align-items:center; gap:10px; }
+    .logo-dot { width:10px; height:10px; border-radius:50%; background:var(--green); display:inline-block; }
+    .logo-text { font-family:'Space Mono',monospace; font-size:15px; font-weight:700; color:var(--text); }
+    .dash-nav-right { display:flex; align-items:center; gap:10px; }
+    .date-badge { font-size:12px; color:var(--text-muted); background:var(--bg); padding:5px 12px; border-radius:12px; border:0.5px solid var(--border); }
+    .theme-toggle { width:32px; height:32px; border-radius:50%; border:0.5px solid var(--border); background:transparent; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:13px; transition:background 0.15s; }
+    .theme-toggle:hover { background:var(--bg); color:var(--text); }
+    .user-pill { display:flex; align-items:center; gap:8px; background:var(--bg); border:0.5px solid var(--border); border-radius:20px; padding:4px 12px 4px 4px; font-size:13px; color:var(--text-muted); }
+    .avatar { width:26px; height:26px; border-radius:50%; background:var(--green); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:#fff; flex-shrink:0; }
+    .btn-disconnect { background:transparent; border:0.5px solid var(--border); border-radius:8px; padding:6px 10px; color:var(--text-muted); cursor:pointer; font-size:13px; transition:background 0.15s; }
+    .btn-disconnect:hover { background:#FCEBEB; color:#A32D2D; border-color:#F09595; }
+
+    /* STATES */
+    .loading-state { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; min-height:60vh; color:var(--text-muted); font-size:14px; }
+    .load-spinner { width:40px; height:40px; border:2.5px solid var(--border); border-top-color:var(--green); border-radius:50%; animation:spin 0.8s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .error-state { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; min-height:60vh; text-align:center; padding:24px; }
+    .error-state i { font-size:32px; color:#E24B4A; }
+    .error-state h3 { font-size:18px; font-weight:600; color:var(--text); }
+    .error-state p { font-size:14px; color:var(--text-muted); max-width:360px; line-height:1.6; }
+    .error-state button { margin-top:8px; background:var(--green); color:#fff; border:none; border-radius:8px; padding:10px 20px; font-family:'DM Sans',sans-serif; font-size:14px; cursor:pointer; }
+
+    /* DASH BODY */
+    .dash-body { max-width:1400px; margin:0 auto; padding:24px; display:flex; flex-direction:column; gap:16px; }
+    .section-label { font-size:11px; font-weight:500; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-faint); padding-top:4px; }
+
+    /* CARDS */
+    .hero-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+    @media(max-width:700px) { .hero-grid { grid-template-columns:1fr; } }
+    .hero-card { background:var(--card-bg); border:0.5px solid var(--border); border-radius:14px; padding:18px 20px; border-left-width:3px; animation:fadeUp 0.4s ease both; }
+    .hero-card.accent-green { border-left-color:var(--green); }
+    .hero-card.accent-coral { border-left-color:var(--coral); }
+    .hero-card.accent-blue  { border-left-color:var(--blue); }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+    .card-icon { font-size:16px; margin-bottom:10px; color:var(--text-muted); }
+    .card-value { font-family:'Space Mono',monospace; font-size:28px; font-weight:700; color:var(--text); line-height:1; margin-bottom:4px; }
+    .card-unit { font-family:'DM Sans',sans-serif; font-size:13px; color:var(--text-faint); font-weight:400; }
+    .card-label { font-size:12px; color:var(--text-muted); margin-top:2px; }
+    .card-delta { font-size:11px; font-weight:500; margin-top:6px; }
+    .card-delta.up { color:#0F6E56; } .card-delta.down { color:#993C1D; }
+    .progress-bar { height:4px; background:var(--bg); border-radius:2px; margin-top:12px; overflow:hidden; }
+    .progress-fill { height:100%; border-radius:2px; transition:width 0.8s cubic-bezier(0.4,0,0.2,1); width:0%; }
+
+    .mid-grid { display:grid; grid-template-columns:1.5fr 1fr; gap:12px; }
+    @media(max-width:900px) { .mid-grid { grid-template-columns:1fr; } }
+    .card-base { background:var(--card-bg); border:0.5px solid var(--border); border-radius:14px; padding:18px 20px; animation:fadeUp 0.5s ease both; }
+    .chart-label-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+    .chart-title { font-size:13px; font-weight:500; color:var(--text); }
+    .chip { font-size:11px; padding:3px 10px; border-radius:10px; border:0.5px solid var(--border); color:var(--text-muted); background:transparent; cursor:pointer; }
+    .chip.active { background:#E1F5EE; color:#0F6E56; border-color:transparent; }
+
+    .zone-grid { display:flex; flex-direction:column; gap:10px; }
+    .zone-row { display:flex; align-items:center; gap:10px; }
+    .zone-name { font-size:12px; color:var(--text-muted); width:60px; flex-shrink:0; }
+    .zone-bar-wrap { flex:1; height:8px; background:var(--bg); border-radius:4px; overflow:hidden; }
+    .zone-bar { height:100%; border-radius:4px; transition:width 0.8s ease; width:0%; }
+    .zone-mins { font-size:11px; font-family:'Space Mono',monospace; color:var(--text-muted); width:44px; text-align:right; flex-shrink:0; }
+    .hr-footer { display:flex; justify-content:space-between; margin-top:16px; padding-top:14px; border-top:0.5px solid var(--border); }
+    .hr-footer-label { font-size:11px; color:var(--text-faint); margin-bottom:3px; }
+    .hr-footer-val { font-family:'Space Mono',monospace; font-size:18px; font-weight:700; color:var(--text); }
+    .hr-footer-unit { font-family:'DM Sans',sans-serif; font-size:12px; font-weight:400; color:var(--text-faint); }
+
+    .sleep-time-badge { font-size:12px; color:var(--text-muted); font-family:'Space Mono',monospace; }
+    .sleep-stages { display:flex; height:14px; border-radius:7px; overflow:hidden; gap:2px; margin-bottom:10px; }
+    .stage-seg { height:100%; border-radius:3px; }
+    .sleep-legend { display:flex; gap:16px; margin-bottom:14px; }
+    .sleep-legend-item { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text-muted); }
+    .sleep-legend-item span { width:8px; height:8px; border-radius:2px; display:inline-block; flex-shrink:0; }
+    .sleep-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:6px; }
+    .sleep-stat { background:var(--bg); border-radius:10px; padding:12px 14px; }
+    .sleep-val { font-family:'Space Mono',monospace; font-size:20px; font-weight:700; color:var(--text); margin-bottom:3px; }
+    .sleep-lbl { font-size:11px; color:var(--text-muted); }
+
+    .bottom-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+    @media(max-width:900px) { .bottom-grid { grid-template-columns:1fr; } }
+    .vitals-row { display:flex; flex-direction:column; gap:8px; }
+    .vital-item { display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--bg); border-radius:10px; }
+    .vital-icon { font-size:14px; color:var(--text-muted); width:18px; text-align:center; flex-shrink:0; }
+    .vital-info { flex:1; }
+    .vital-name { font-size:11px; color:var(--text-muted); margin-bottom:2px; }
+    .vital-value { font-family:'Space Mono',monospace; font-size:14px; font-weight:700; color:var(--text); }
+    .vital-badge { font-size:10px; padding:3px 8px; border-radius:8px; font-weight:500; flex-shrink:0; }
+    .vital-badge.good { background:#E1F5EE; color:#0F6E56; }
+    .vital-badge.warn { background:#FAEEDA; color:#854F0B; }
+    .vital-badge.bad  { background:#FCEBEB; color:#A32D2D; }
+    .cal-footer { display:flex; gap:24px; margin-top:12px; padding-top:12px; border-top:0.5px solid var(--border); }
+    .body-metrics { display:flex; justify-content:space-between; margin-bottom:14px; padding-bottom:14px; border-bottom:0.5px solid var(--border); }
+    .body-metric { text-align:center; }
+    .bm-val { font-family:'Space Mono',monospace; font-size:20px; font-weight:700; color:var(--text); margin-bottom:3px; }
+    .bm-lbl { font-size:10px; color:var(--text-muted); }
+    .distance-row { display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--bg); border-radius:10px; }
+
+    .insight-card { background:#E1F5EE; border:0.5px solid #9FE1CB; border-radius:14px; padding:14px 18px; display:flex; align-items:flex-start; gap:12px; }
+    .insight-icon { font-size:18px; color:#0F6E56; margin-top:1px; flex-shrink:0; }
+    .insight-text { font-size:13px; color:#085041; line-height:1.6; }
+    .insight-text strong { font-weight:600; }
+    body.dark .insight-card { background:rgba(29,158,117,0.12); border-color:rgba(29,158,117,0.25); }
+    body.dark .insight-text { color:#9FE1CB; }
+    body.dark .insight-icon { color:#5DCAA5; }
+  </style>
 </head>
-<body class="dashboard-page">
+<body>
 
   <nav class="dash-nav">
     <div class="dash-nav-inner">
@@ -21,40 +143,32 @@
       </div>
       <div class="dash-nav-right">
         <div class="date-badge" id="dateBadge">Loading…</div>
-        <button class="theme-toggle" id="themeToggle" title="Toggle dark mode">
+        <button class="theme-toggle" id="themeToggle" title="Toggle theme">
           <i class="fas fa-moon" id="themeIcon"></i>
         </button>
-        <div class="user-pill" id="userPill">
+        <div class="user-pill">
           <div class="avatar" id="userAvatar">–</div>
           <span id="userName">Loading…</span>
         </div>
-        <button class="btn-disconnect" onclick="disconnect()">
+        <button class="btn-disconnect" onclick="disconnect()" title="Disconnect">
           <i class="fas fa-sign-out-alt"></i>
         </button>
       </div>
     </div>
   </nav>
 
-  <div class="dash-body" id="dashBody">
-
-    <!-- Loading skeleton -->
+  <div class="dash-body">
     <div id="loadingState" class="loading-state">
       <div class="load-spinner"></div>
       <p>Fetching your health data…</p>
     </div>
-
-    <!-- Error state -->
     <div id="errorState" class="error-state" style="display:none">
       <i class="fas fa-exclamation-circle"></i>
       <h3>Couldn't load data</h3>
-      <p id="errorMsg">Something went wrong fetching your Fitbit data.</p>
+      <p id="errorMsg">Something went wrong.</p>
       <button onclick="loadDashboard()">Try again</button>
     </div>
-
-    <!-- Dashboard content -->
     <div id="dashContent" style="display:none">
-
-      <!-- Activity Section -->
       <div class="section-label">Today's Activity</div>
       <div class="hero-grid">
         <div class="hero-card accent-green">
@@ -62,42 +176,39 @@
           <div class="card-value"><span id="steps">–</span><span class="card-unit"> steps</span></div>
           <div class="card-label">Goal: <span id="stepsGoal">10,000</span></div>
           <div class="card-delta" id="stepsDelta"></div>
-          <div class="progress-bar"><div class="progress-fill" id="stepsProgress" style="background:#1D9E75;"></div></div>
+          <div class="progress-bar"><div class="progress-fill" id="stepsProgress" style="background:var(--green)"></div></div>
         </div>
         <div class="hero-card accent-coral">
           <div class="card-icon"><i class="fas fa-fire"></i></div>
           <div class="card-value"><span id="calories">–</span><span class="card-unit"> kcal</span></div>
           <div class="card-label">Active / <span id="totalCalories">–</span> BMR</div>
           <div class="card-delta" id="caloriesDelta"></div>
-          <div class="progress-bar"><div class="progress-fill" id="caloriesProgress" style="background:#D85A30;"></div></div>
+          <div class="progress-bar"><div class="progress-fill" id="caloriesProgress" style="background:var(--coral)"></div></div>
         </div>
         <div class="hero-card accent-blue">
           <div class="card-icon"><i class="fas fa-clock"></i></div>
           <div class="card-value"><span id="activeMin">–</span><span class="card-unit"> min</span></div>
           <div class="card-label">Active minutes</div>
           <div class="card-delta" id="activeMinDelta"></div>
-          <div class="progress-bar"><div class="progress-fill" id="activeMinProgress" style="background:#378ADD;"></div></div>
+          <div class="progress-bar"><div class="progress-fill" id="activeMinProgress" style="background:var(--blue)"></div></div>
         </div>
       </div>
 
-      <!-- Mid row -->
       <div class="mid-grid">
         <div class="card-base">
           <div class="chart-label-row">
             <span class="chart-title">Steps — last 7 days</span>
             <span class="chip active">7d</span>
           </div>
-          <div style="position:relative;height:140px;">
-            <canvas id="stepsChart" role="img" aria-label="Bar chart of daily steps for the past 7 days"></canvas>
-          </div>
+          <div style="position:relative;height:140px"><canvas id="stepsChart"></canvas></div>
         </div>
         <div class="card-base">
           <div class="chart-label-row"><span class="chart-title">Heart rate zones</span></div>
-          <div class="zone-grid" id="hrZones">
-            <div class="zone-row"><span class="zone-name">Peak</span><div class="zone-bar-wrap"><div class="zone-bar" id="zPeak" style="background:#D85A30;"></div></div><span class="zone-mins" id="zPeakMin">–</span></div>
-            <div class="zone-row"><span class="zone-name">Cardio</span><div class="zone-bar-wrap"><div class="zone-bar" id="zCardio" style="background:#EF9F27;"></div></div><span class="zone-mins" id="zCardioMin">–</span></div>
-            <div class="zone-row"><span class="zone-name">Fat burn</span><div class="zone-bar-wrap"><div class="zone-bar" id="zFat" style="background:#1D9E75;"></div></div><span class="zone-mins" id="zFatMin">–</span></div>
-            <div class="zone-row"><span class="zone-name">Rest</span><div class="zone-bar-wrap"><div class="zone-bar" id="zRest" style="background:#85B7EB;"></div></div><span class="zone-mins" id="zRestMin">–</span></div>
+          <div class="zone-grid">
+            <div class="zone-row"><span class="zone-name">Peak</span><div class="zone-bar-wrap"><div class="zone-bar" id="zPeak" style="background:#D85A30"></div></div><span class="zone-mins" id="zPeakMin">–</span></div>
+            <div class="zone-row"><span class="zone-name">Cardio</span><div class="zone-bar-wrap"><div class="zone-bar" id="zCardio" style="background:#EF9F27"></div></div><span class="zone-mins" id="zCardioMin">–</span></div>
+            <div class="zone-row"><span class="zone-name">Fat burn</span><div class="zone-bar-wrap"><div class="zone-bar" id="zFat" style="background:#1D9E75"></div></div><span class="zone-mins" id="zFatMin">–</span></div>
+            <div class="zone-row"><span class="zone-name">Rest</span><div class="zone-bar-wrap"><div class="zone-bar" id="zRest" style="background:#85B7EB"></div></div><span class="zone-mins" id="zRestMin">–</span></div>
           </div>
           <div class="hr-footer">
             <div><div class="hr-footer-label">Resting HR</div><div class="hr-footer-val"><span id="restingHR">–</span> <span class="hr-footer-unit">bpm</span></div></div>
@@ -107,7 +218,6 @@
         </div>
       </div>
 
-      <!-- Sleep -->
       <div class="card-base">
         <div class="chart-label-row">
           <span class="chart-title">Last night's sleep</span>
@@ -127,45 +237,24 @@
         </div>
       </div>
 
-      <!-- Bottom row -->
       <div class="bottom-grid">
         <div class="card-base">
           <div class="chart-label-row"><span class="chart-title">Vitals</span></div>
           <div class="vitals-row">
-            <div class="vital-item">
-              <span class="vital-icon"><i class="fas fa-heart"></i></span>
-              <div class="vital-info"><div class="vital-name">Heart Rate</div><div class="vital-value" id="heartRate">–</div></div>
-              <span class="vital-badge good" id="hrBadge">–</span>
-            </div>
-            <div class="vital-item">
-              <span class="vital-icon"><i class="fas fa-lungs"></i></span>
-              <div class="vital-info"><div class="vital-name">Blood Oxygen</div><div class="vital-value" id="spo2Vital">–</div></div>
-              <span class="vital-badge good" id="spo2Badge">–</span>
-            </div>
-            <div class="vital-item">
-              <span class="vital-icon"><i class="fas fa-wind"></i></span>
-              <div class="vital-info"><div class="vital-name">Breathing Rate</div><div class="vital-value" id="breathRate">–</div></div>
-              <span class="vital-badge good">Normal</span>
-            </div>
-            <div class="vital-item">
-              <span class="vital-icon"><i class="fas fa-thermometer-half"></i></span>
-              <div class="vital-info"><div class="vital-name">Skin Temp</div><div class="vital-value" id="skinTemp">–</div></div>
-              <span class="vital-badge" id="tempBadge">–</span>
-            </div>
+            <div class="vital-item"><span class="vital-icon"><i class="fas fa-heart"></i></span><div class="vital-info"><div class="vital-name">Heart Rate</div><div class="vital-value" id="heartRate">–</div></div><span class="vital-badge good" id="hrBadge">–</span></div>
+            <div class="vital-item"><span class="vital-icon"><i class="fas fa-lungs"></i></span><div class="vital-info"><div class="vital-name">Blood Oxygen</div><div class="vital-value" id="spo2Vital">–</div></div><span class="vital-badge good" id="spo2Badge">–</span></div>
+            <div class="vital-item"><span class="vital-icon"><i class="fas fa-wind"></i></span><div class="vital-info"><div class="vital-name">Breathing Rate</div><div class="vital-value" id="breathRate">–</div></div><span class="vital-badge good">Normal</span></div>
+            <div class="vital-item"><span class="vital-icon"><i class="fas fa-thermometer-half"></i></span><div class="vital-info"><div class="vital-name">Skin Temp</div><div class="vital-value" id="skinTemp">–</div></div><span class="vital-badge" id="tempBadge">–</span></div>
           </div>
         </div>
-
         <div class="card-base">
           <div class="chart-label-row"><span class="chart-title">Weekly calories</span></div>
-          <div style="position:relative;height:100px;">
-            <canvas id="calChart" role="img" aria-label="Bar chart of weekly calories burned"></canvas>
-          </div>
+          <div style="position:relative;height:100px"><canvas id="calChart"></canvas></div>
           <div class="cal-footer">
-            <div><div class="hr-footer-label">Avg/day</div><div class="hr-footer-val" id="calAvg">– kcal</div></div>
-            <div><div class="hr-footer-label">Weekly total</div><div class="hr-footer-val" id="calTotal">– kcal</div></div>
+            <div><div class="hr-footer-label">Avg/day</div><div class="hr-footer-val" id="calAvg">–</div></div>
+            <div><div class="hr-footer-label">Weekly total</div><div class="hr-footer-val" id="calTotal">–</div></div>
           </div>
         </div>
-
         <div class="card-base">
           <div class="chart-label-row"><span class="chart-title">Body metrics</span></div>
           <div class="body-metrics">
@@ -174,31 +263,307 @@
             <div class="body-metric"><div class="bm-val" id="bodyFat">–</div><div class="bm-lbl">body fat %</div></div>
           </div>
           <div class="distance-row">
-            <div class="card-icon" style="margin:0"><i class="fas fa-route"></i></div>
-            <div>
-              <div style="font-size:11px;color:var(--text-muted)">Distance today</div>
-              <div class="hr-footer-val"><span id="distance">–</span> <span class="hr-footer-unit">km</span></div>
-            </div>
-            <div>
-              <div style="font-size:11px;color:var(--text-muted)">Floors</div>
-              <div class="hr-footer-val"><span id="floors">–</span></div>
-            </div>
+            <span class="card-icon" style="margin:0"><i class="fas fa-route"></i></span>
+            <div><div style="font-size:11px;color:var(--text-muted)">Distance today</div><div class="hr-footer-val"><span id="distance">–</span> <span class="hr-footer-unit">km</span></div></div>
+            <div><div style="font-size:11px;color:var(--text-muted)">Floors</div><div class="hr-footer-val"><span id="floors">–</span></div></div>
           </div>
         </div>
       </div>
 
-      <!-- Insight -->
-      <div class="insight-card" id="insightCard">
+      <div class="insight-card">
         <i class="fas fa-lightbulb insight-icon"></i>
         <div class="insight-text" id="insightText">Loading insight…</div>
       </div>
-
     </div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-  <script src="js/auth.js"></script>
-  <script src="js/api.js"></script>
-  <script src="js/dashboard.js"></script>
+  <script>
+  // ── AUTH ──────────────────────────────────────────────
+  const FITBIT_TOKEN_URL = 'https://api.fitbit.com/oauth2/token';
+
+  function getAccessToken() { return sessionStorage.getItem('fitbit_access_token'); }
+  function isLoggedIn() {
+    const t = getAccessToken(), e = sessionStorage.getItem('token_expiry');
+    return !!(t && (!e || Date.now() < parseInt(e)));
+  }
+  function disconnect() { sessionStorage.clear(); window.location.href = 'index.html'; }
+
+  // Handle OAuth callback (code in URL)
+  async function maybeHandleCallback() {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const state = params.get('state');
+    const error = params.get('error');
+
+    if (error) { showError('Fitbit returned: ' + error); return; }
+    if (!code) { if (!isLoggedIn()) window.location.href = 'index.html'; return; }
+
+    const verifier = sessionStorage.getItem('pkce_verifier');
+    const savedState = sessionStorage.getItem('oauth_state');
+    const clientId = sessionStorage.getItem('fitbit_client_id');
+    const redirectUri = sessionStorage.getItem('redirect_uri');
+
+    if (!verifier || !clientId) { showError('Missing auth data. Please reconnect.'); return; }
+    if (state !== savedState) { showError('Security error. Please reconnect.'); return; }
+
+    // Clean URL
+    window.history.replaceState({}, '', window.location.pathname);
+
+    try {
+      const resp = await fetch(FITBIT_TOKEN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ client_id: clientId, grant_type: 'authorization_code', code, code_verifier: verifier, redirect_uri: redirectUri })
+      });
+      if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e.errors?.[0]?.message || `Token error ${resp.status}`); }
+      const data = await resp.json();
+      sessionStorage.setItem('fitbit_access_token', data.access_token);
+      if (data.refresh_token) sessionStorage.setItem('fitbit_refresh_token', data.refresh_token);
+      sessionStorage.setItem('fitbit_user_id', data.user_id);
+      sessionStorage.setItem('token_expiry', Date.now() + data.expires_in * 1000);
+      sessionStorage.removeItem('pkce_verifier');
+      sessionStorage.removeItem('oauth_state');
+      loadDashboard();
+    } catch(err) { showError(err.message); }
+  }
+
+  // ── API ───────────────────────────────────────────────
+  async function fitbitFetch(endpoint) {
+    const resp = await fetch('https://api.fitbit.com' + endpoint, { headers: { Authorization: 'Bearer ' + getAccessToken() } });
+    if (resp.status === 401) { disconnect(); throw new Error('Session expired.'); }
+    if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e.errors?.[0]?.message || `API error ${resp.status}`); }
+    return resp.json();
+  }
+
+  function today() { return new Date().toISOString().split('T')[0]; }
+  function daysAgo(n) { const d = new Date(); d.setDate(d.getDate()-n); return d.toISOString().split('T')[0]; }
+
+  async function fetchAll() {
+    const results = await Promise.allSettled([
+      fitbitFetch('/1/user/-/profile.json'),
+      fitbitFetch(`/1/user/-/activities/date/${today()}.json`),
+      fitbitFetch(`/1/user/-/activities/steps/date/${daysAgo(6)}/${today()}.json`),
+      fitbitFetch(`/1/user/-/activities/calories/date/${daysAgo(6)}/${today()}.json`),
+      fitbitFetch(`/1/user/-/activities/heart/date/${today()}/1d.json`),
+      fitbitFetch(`/1.2/user/-/sleep/date/${today()}.json`),
+      fitbitFetch(`/1/user/-/body/log/weight/date/${today()}.json`),
+      fitbitFetch(`/1/user/-/body/log/fat/date/${today()}.json`),
+      fitbitFetch(`/1/user/-/spo2/date/${today()}.json`).catch(()=>null),
+      fitbitFetch(`/1/user/-/br/date/${today()}.json`).catch(()=>null),
+      fitbitFetch(`/1/user/-/temp/skin/date/${today()}.json`).catch(()=>null),
+      fitbitFetch(`/1/user/-/hrv/date/${today()}.json`).catch(()=>null),
+    ]);
+    const g = r => r.status === 'fulfilled' ? r.value : null;
+    return { profile:g(results[0]), activity:g(results[1]), weekSteps:g(results[2]), weekCals:g(results[3]), heartRate:g(results[4]), sleep:g(results[5]), weight:g(results[6]), bodyFat:g(results[7]), spo2:g(results[8]), breathing:g(results[9]), skinTemp:g(results[10]), hrv:g(results[11]) };
+  }
+
+  // ── RENDER ────────────────────────────────────────────
+  let stepsChart, calChart;
+
+  function setText(id, v) { const e = document.getElementById(id); if(e) e.textContent = v; }
+  function setProgress(id, r) { const e = document.getElementById(id); if(e) e.style.width = Math.min(100, Math.round(r*100))+'%'; }
+  function minsToHM(m) { const h=Math.floor(m/60),mm=m%60; return h>0?`${h}h ${mm}m`:`${mm}m`; }
+  function fmtTime(s) { return new Date(s).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}); }
+
+  function showState(s) {
+    document.getElementById('loadingState').style.display = s==='loading'?'flex':'none';
+    document.getElementById('errorState').style.display   = s==='error'?'flex':'none';
+    document.getElementById('dashContent').style.display  = s==='content'?'block':'none';
+  }
+  function showError(msg) { document.getElementById('errorMsg').textContent = msg; showState('error'); }
+
+  async function loadDashboard() {
+    showState('loading');
+    try { const d = await fetchAll(); renderAll(d); showState('content'); }
+    catch(err) { showError(err.message); }
+  }
+
+  function renderAll(d) {
+    renderProfile(d.profile);
+    renderActivity(d.activity);
+    renderWeeklySteps(d.weekSteps);
+    renderHeartRate(d.heartRate, d.hrv);
+    renderSleep(d.sleep);
+    renderVitals(d.heartRate, d.spo2, d.breathing, d.skinTemp);
+    renderWeeklyCalories(d.weekCals);
+    renderBody(d.weight, d.bodyFat);
+    renderInsight(d.activity, d.sleep);
+  }
+
+  function renderProfile(p) {
+    if (!p) return;
+    const name = p.user.displayName || p.user.fullName || 'You';
+    setText('userName', name);
+    document.getElementById('userAvatar').textContent = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  }
+
+  function renderActivity(a) {
+    if (!a) return;
+    const s = a.summary;
+    const steps = s.steps||0, stepsGoal = a.goals?.steps||10000;
+    const activeMin = (s.fairlyActiveMinutes||0)+(s.veryActiveMinutes||0);
+    const activeGoal = a.goals?.activeMinutes||60;
+    const calories = s.activityCalories||0;
+    setText('steps', steps.toLocaleString());
+    setText('stepsGoal', stepsGoal.toLocaleString());
+    setText('calories', calories.toLocaleString());
+    setText('totalCalories', (s.caloriesOut||0).toLocaleString());
+    setText('activeMin', activeMin);
+    setProgress('stepsProgress', steps/stepsGoal);
+    setProgress('caloriesProgress', calories/600);
+    setProgress('activeMinProgress', activeMin/activeGoal);
+    setText('distance', (s.distances?.find(d=>d.activity==='total')?.distance||0).toFixed(2));
+    setText('floors', s.floors||0);
+    setDelta('stepsDelta', steps, stepsGoal, 'goal');
+    setDelta('activeMinDelta', activeMin, activeGoal, 'min goal');
+  }
+
+  function setDelta(id, val, goal, unit) {
+    const el = document.getElementById(id); if (!el) return;
+    const diff = val - goal;
+    el.className = 'card-delta ' + (diff>=0?'up':'down');
+    el.innerHTML = diff>=0
+      ? `<i class="fas fa-arrow-up"></i> +${Math.abs(diff).toLocaleString()} above ${unit}`
+      : `<i class="fas fa-arrow-down"></i> ${Math.abs(diff).toLocaleString()} below ${unit}`;
+  }
+
+  function renderWeeklySteps(ws) {
+    if (!ws) return;
+    const entries = ws['activities-steps']||[];
+    const labels = entries.map(e => ['S','M','T','W','T','F','S'][new Date(e.dateTime).getDay()]);
+    const values = entries.map(e => parseInt(e.value)||0);
+    const todayStr = today();
+    const colors = entries.map((e,i) => e.dateTime===todayStr?'#1D9E75': values[i]>=10000?'#5DCAA5':'#9FE1CB');
+    if (stepsChart) stepsChart.destroy();
+    stepsChart = new Chart(document.getElementById('stepsChart'), {
+      type:'bar', data:{ labels, datasets:[{ data:values, backgroundColor:colors, borderRadius:4, borderSkipped:false }] },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>c.parsed.y.toLocaleString()+' steps'}} }, scales:{ x:{grid:{display:false},ticks:{color:'#888780',font:{size:11}}}, y:{display:false} } }
+    });
+  }
+
+  function renderHeartRate(hr, hrvData) {
+    if (!hr) return;
+    const summary = hr['activities-heart']?.[0]?.value;
+    if (!summary) return;
+    if (summary.restingHeartRate) setText('restingHR', summary.restingHeartRate);
+    const zones = summary.heartRateZones||[];
+    const peak = zones.find(z=>z.name==='Peak'), cardio = zones.find(z=>z.name==='Cardio');
+    const fat  = zones.find(z=>z.name==='Fat Burn'), rest = zones.find(z=>z.name==='Out of Range');
+    const setZ = (bId,mId,z,max) => {
+      if (!z) return;
+      const bar=document.getElementById(bId), mins=z.minutes||0;
+      if(bar) bar.style.width=Math.round((mins/max)*100)+'%';
+      const el=document.getElementById(mId);
+      if(el) el.textContent = mins<60?`${mins}m`:`${Math.floor(mins/60)}h ${mins%60}m`;
+    };
+    setZ('zPeak','zPeakMin',peak,60); setZ('zCardio','zCardioMin',cardio,60);
+    setZ('zFat','zFatMin',fat,120); setZ('zRest','zRestMin',rest,1440);
+    if (hrvData?.hrv?.[0]?.value?.dailyRmssd) setText('hrv', Math.round(hrvData.hrv[0].value.dailyRmssd));
+  }
+
+  function renderSleep(sleep) {
+    if (!sleep?.sleep?.length) return;
+    const main = sleep.sleep.find(s=>s.isMainSleep)||sleep.sleep[0];
+    if (main.startTime && main.endTime) setText('sleepTime', `${fmtTime(main.startTime)} – ${fmtTime(main.endTime)}`);
+    const totalMins = sleep.summary?.totalMinutesAsleep||main.minutesAsleep||0;
+    setText('sleepTotal', minsToHM(totalMins));
+    setText('sleepScore', Math.min(100,Math.round(main.efficiency||0))||'–');
+    if (main.levels?.summary?.rem) setText('sleepREM', minsToHM(main.levels.summary.rem.minutes||0));
+    const stageColors = { wake:'#85B7EB',light:'#378ADD',deep:'#185FA5',rem:'#7F77DD',asleep:'#378ADD',restless:'#85B7EB',awake:'#85B7EB' };
+    const container = document.getElementById('sleepStages'); container.innerHTML='';
+    const data = main.levels?.data||[];
+    const total = data.reduce((s,seg)=>s+(seg.seconds||0),0);
+    data.forEach(seg => {
+      const div = document.createElement('div'); div.className='stage-seg';
+      div.style.flex=((seg.seconds||0)/total*100).toFixed(1);
+      div.style.background=stageColors[seg.level]||'#85B7EB';
+      div.style.borderRadius='3px';
+      div.title=`${seg.level} – ${Math.round(seg.seconds/60)} min`;
+      container.appendChild(div);
+    });
+  }
+
+  function renderVitals(hr, spo2, breathing, skinTemp) {
+    const resting = hr?.['activities-heart']?.[0]?.value?.restingHeartRate;
+    if (resting) {
+      setText('heartRate', resting+' bpm');
+      const b=document.getElementById('hrBadge');
+      if(b){b.textContent=resting<60?'Low':resting<=100?'Normal':'High'; b.className='vital-badge '+(resting<60||resting>100?'warn':'good');}
+    }
+    const spo2Val = spo2?.value?.avg||spo2?.avg;
+    if (spo2Val) {
+      const v=Math.round(spo2Val);
+      setText('spo2Vital',v+'%'); setText('spo2',v);
+      const b=document.getElementById('spo2Badge');
+      if(b){b.textContent=v>=95?'Optimal':v>=90?'Low':'Very low'; b.className='vital-badge '+(v>=95?'good':'warn');}
+    }
+    const br = breathing?.br?.[0]?.value?.breathingRate;
+    if (br) setText('breathRate', Math.round(br)+' /min');
+    const temp = skinTemp?.tempSkin?.[0]?.value?.nightlyRelative;
+    if (temp!==undefined&&temp!==null) {
+      setText('skinTemp',(temp>=0?'+':'')+temp.toFixed(1)+' °C');
+      const b=document.getElementById('tempBadge');
+      if(b){b.textContent=Math.abs(temp)<=0.5?'Normal':'Slightly high'; b.className='vital-badge '+(Math.abs(temp)<=0.5?'good':'warn');}
+    }
+  }
+
+  function renderWeeklyCalories(wc) {
+    if (!wc) return;
+    const entries = wc['activities-calories']||[];
+    const labels = entries.map(e=>['S','M','T','W','T','F','S'][new Date(e.dateTime).getDay()]);
+    const values = entries.map(e=>parseInt(e.value)||0);
+    const todayStr = today();
+    const colors = entries.map(e=>e.dateTime===todayStr?'#D85A30':'#F0997B');
+    const nz=values.filter(v=>v>0);
+    const avg=nz.length?Math.round(nz.reduce((a,b)=>a+b,0)/nz.length):0;
+    setText('calAvg',avg.toLocaleString()+' kcal');
+    setText('calTotal',nz.reduce((a,b)=>a+b,0).toLocaleString()+' kcal');
+    if (calChart) calChart.destroy();
+    calChart = new Chart(document.getElementById('calChart'), {
+      type:'bar', data:{ labels, datasets:[{ data:values, backgroundColor:colors, borderRadius:4, borderSkipped:false }] },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>c.parsed.y.toLocaleString()+' kcal'}} }, scales:{ x:{grid:{display:false},ticks:{color:'#888780',font:{size:11}}}, y:{display:false} } }
+    });
+  }
+
+  function renderBody(weight, bodyFat) {
+    if (weight?.weight?.length) setText('weight', weight.weight[0].weight.toFixed(1));
+    if (bodyFat?.fat?.length) setText('bodyFat', bodyFat.fat[0].fat.toFixed(1));
+  }
+
+  function renderInsight(activity, sleep) {
+    const steps = activity?.summary?.steps||0, goal = activity?.goals?.steps||10000;
+    const eff = sleep?.sleep?.find(s=>s.isMainSleep)?.efficiency||0;
+    let msg;
+    if (steps >= goal) msg = `<strong>Goal crushed!</strong> You've already hit your ${goal.toLocaleString()} step goal today. Keep it up!`;
+    else { const rem=goal-steps; msg=`<strong>Almost there!</strong> You need ${rem.toLocaleString()} more steps to hit your goal — about ${Math.round(rem/1300)} minutes of walking.`; }
+    if (eff>=85) msg+=` And your sleep efficiency was ${eff}% — excellent recovery.`;
+    else if (eff>0&&eff<75) msg+=` Sleep efficiency was ${eff}% — try a consistent bedtime to improve recovery.`;
+    document.getElementById('insightText').innerHTML = msg;
+  }
+
+  // ── THEME ─────────────────────────────────────────────
+  function initTheme() {
+    const saved = localStorage.getItem('theme');
+    if (saved) document.body.classList.add(saved);
+    const btn=document.getElementById('themeToggle'), icon=document.getElementById('themeIcon');
+    if (!btn) return;
+    const isDark = document.body.classList.contains('dark') || (!saved && window.matchMedia('(prefers-color-scheme:dark)').matches);
+    if(icon) icon.className = isDark?'fas fa-sun':'fas fa-moon';
+    btn.onclick = () => {
+      const nowDark = document.body.classList.toggle('dark');
+      document.body.classList.toggle('light',!nowDark);
+      if(icon) icon.className = nowDark?'fas fa-sun':'fas fa-moon';
+      localStorage.setItem('theme', nowDark?'dark':'light');
+    };
+  }
+
+  // ── INIT ──────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
+    document.getElementById('dateBadge').textContent = new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+    maybeHandleCallback();
+  });
+  </script>
 </body>
 </html>
