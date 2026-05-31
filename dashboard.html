@@ -308,13 +308,13 @@
   async function rollUp(dataType, startDate, endDate){
     return healthFetch(`/users/-/dataTypes/${dataType}/dataPoints:dailyRollUp`, {
       method:'POST',
-      body: JSON.stringify({ startDate, endDate })
+      body: JSON.stringify({ start_date: startDate, end_date: endDate })
     });
   }
 
   // list GET
   async function listPoints(dataType, startTime, endTime){
-    const p = new URLSearchParams({ startTime, endTime });
+    const p = new URLSearchParams({ start_time: startTime, end_time: endTime });
     return healthFetch(`/users/-/dataTypes/${dataType}/dataPoints?${p}`);
   }
 
@@ -542,12 +542,12 @@
     const points = sleepD?.dataPoints;
     if (!points?.length) return;
     const main = points[0];
-    if (!main?.startTime||!main?.endTime) return;
+    if (!(main?.start_time ?? main?.startTime) || !(main?.end_time ?? main?.endTime)) return;
 
     const fmt = s=>new Date(s).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
-    setText('sleepTime', `${fmt(main.startTime)} – ${fmt(main.endTime)}`);
+    setText('sleepTime', `${fmt(main.start_time ?? main.startTime)} – ${fmt(main.end_time ?? main.endTime)}`);
 
-    const totalMins = (new Date(main.endTime)-new Date(main.startTime))/(1000*60);
+    const totalMins = (new Date(main.end_time ?? main.endTime)-new Date(main.start_time ?? main.startTime))/(1000*60);
     const levels = main.value?.sleepLevels ?? main.sleepLevels ?? [];
     const awakeMins = levels.filter(l=>['WAKE','AWAKE'].includes(l.level?.toUpperCase())).reduce((a,l)=>a+(l.seconds||0)/60,0);
     const remMins   = levels.filter(l=>l.level?.toUpperCase()==='REM').reduce((a,l)=>a+(l.seconds||0)/60,0);
@@ -609,8 +609,8 @@
       ? `<strong>Goal crushed!</strong> You've already hit your ${goal.toLocaleString()} step goal today!`
       : `<strong>Almost there!</strong> You need ${(goal-steps).toLocaleString()} more steps — about ${Math.round((goal-steps)/1300)} minutes of walking.`;
     const pt=sleepD?.dataPoints?.[0];
-    if(pt?.startTime&&pt?.endTime){
-      const mins=(new Date(pt.endTime)-new Date(pt.startTime))/(1000*60);
+    if((pt?.start_time??pt?.startTime)&&(pt?.end_time??pt?.endTime)){
+      const mins=(new Date(pt.end_time ?? pt.endTime)-new Date(pt.start_time ?? pt.startTime))/(1000*60);
       if(mins>=420) msg+=' Great sleep last night too — well recovered!';
       else if(mins>0&&mins<360) msg+=' Your sleep was a bit short — aim for 7–8 hours tonight.';
     }
