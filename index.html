@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FitPulse — Beautiful Fitbit Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="landing-page">
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <div class="logo">
+        <span class="logo-dot"></span>
+        <span class="logo-text">FITPULSE</span>
+      </div>
+      <a href="https://github.com" target="_blank" class="nav-link">
+        <i class="fab fa-github"></i> View on GitHub
+      </a>
+    </div>
+  </nav>
+
+  <main class="hero">
+    <div class="hero-content">
+      <div class="hero-badge">
+        <span class="badge-dot"></span>
+        Open source · Free forever
+      </div>
+      <h1 class="hero-title">
+        Your Fitbit data,<br />
+        <em>beautifully</em> presented.
+      </h1>
+      <p class="hero-sub">
+        FitPulse connects to your Fitbit account and shows your health data in a clean, modern dashboard — far better than the default app.
+      </p>
+
+      <div class="connect-card">
+        <div class="connect-card-header">
+          <i class="fas fa-bolt"></i>
+          Connect your Fitbit
+        </div>
+        <p class="connect-hint">
+          You'll need a free Fitbit developer app to get a <strong>Client ID</strong>. Takes 2 minutes —
+          <a href="setup.html" target="_blank">see setup guide →</a>
+        </p>
+        <div class="form-group">
+          <label for="clientId">Fitbit Client ID</label>
+          <input type="text" id="clientId" placeholder="e.g. 23ABCD" autocomplete="off" spellcheck="false" />
+        </div>
+        <button class="btn-connect" id="connectBtn" onclick="startOAuth()">
+          <i class="fas fa-link"></i>
+          Connect with Fitbit
+        </button>
+        <p class="connect-privacy">
+          <i class="fas fa-lock"></i>
+          Your data never leaves your browser. No servers, no accounts.
+        </p>
+      </div>
+    </div>
+
+    <div class="hero-preview">
+      <div class="preview-frame">
+        <div class="preview-topbar">
+          <span class="preview-dot" style="background:#ff5f57"></span>
+          <span class="preview-dot" style="background:#febc2e"></span>
+          <span class="preview-dot" style="background:#28c840"></span>
+          <span class="preview-url">fitpulse.app/dashboard</span>
+        </div>
+        <div class="preview-content">
+          <div class="p-row">
+            <div class="p-card p-green">
+              <div class="p-card-label">Steps</div>
+              <div class="p-card-val">8,421</div>
+              <div class="p-bar"><div style="width:84%"></div></div>
+            </div>
+            <div class="p-card p-coral">
+              <div class="p-card-label">Calories</div>
+              <div class="p-card-val">547</div>
+              <div class="p-bar"><div style="width:70%"></div></div>
+            </div>
+            <div class="p-card p-blue">
+              <div class="p-card-label">Active min</div>
+              <div class="p-card-val">48</div>
+              <div class="p-bar"><div style="width:80%"></div></div>
+            </div>
+          </div>
+          <div class="p-row">
+            <div class="p-big">
+              <div class="p-big-label">Sleep score</div>
+              <div class="p-big-val">92</div>
+              <div class="p-sleep-bar">
+                <div style="flex:2;background:#85B7EB;border-radius:3px"></div>
+                <div style="flex:12;background:#378ADD;border-radius:3px"></div>
+                <div style="flex:8;background:#185FA5;border-radius:3px"></div>
+                <div style="flex:7;background:#7F77DD;border-radius:3px"></div>
+                <div style="flex:10;background:#378ADD;border-radius:3px"></div>
+              </div>
+            </div>
+            <div class="p-vitals">
+              <div class="p-vital"><span>HR</span><strong>72 bpm</strong></div>
+              <div class="p-vital"><span>SpO2</span><strong>98%</strong></div>
+              <div class="p-vital"><span>HRV</span><strong>44 ms</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="preview-glow"></div>
+    </div>
+  </main>
+
+  <section class="features">
+    <div class="features-inner">
+      <div class="feature">
+        <div class="feature-icon"><i class="fas fa-chart-line"></i></div>
+        <h3>Rich analytics</h3>
+        <p>Steps, heart rate zones, sleep stages, HRV, SpO2, calories and more — all in one view.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon"><i class="fas fa-shield-alt"></i></div>
+        <h3>100% private</h3>
+        <p>Runs entirely in your browser. Data goes from Fitbit directly to your screen — no middleman.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon"><i class="fas fa-moon"></i></div>
+        <h3>Light & dark mode</h3>
+        <p>Automatically matches your system preference. Easy on the eyes, day or night.</p>
+      </div>
+    </div>
+  </section>
+
+  <script src="js/auth.js"></script>
+</body>
+</html>

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FitPulse — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/dashboard.css" />
+</head>
+<body class="dashboard-page">
+
+  <nav class="dash-nav">
+    <div class="dash-nav-inner">
+      <div class="logo">
+        <span class="logo-dot"></span>
+        <span class="logo-text">FITPULSE</span>
+      </div>
+      <div class="dash-nav-right">
+        <div class="date-badge" id="dateBadge">Loading…</div>
+        <button class="theme-toggle" id="themeToggle" title="Toggle dark mode">
+          <i class="fas fa-moon" id="themeIcon"></i>
+        </button>
+        <div class="user-pill" id="userPill">
+          <div class="avatar" id="userAvatar">–</div>
+          <span id="userName">Loading…</span>
+        </div>
+        <button class="btn-disconnect" onclick="disconnect()">
+          <i class="fas fa-sign-out-alt"></i>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="dash-body" id="dashBody">
+
+    <!-- Loading skeleton -->
+    <div id="loadingState" class="loading-state">
+      <div class="load-spinner"></div>
+      <p>Fetching your health data…</p>
+    </div>
+
+    <!-- Error state -->
+    <div id="errorState" class="error-state" style="display:none">
+      <i class="fas fa-exclamation-circle"></i>
+      <h3>Couldn't load data</h3>
+      <p id="errorMsg">Something went wrong fetching your Fitbit data.</p>
+      <button onclick="loadDashboard()">Try again</button>
+    </div>
+
+    <!-- Dashboard content -->
+    <div id="dashContent" style="display:none">
+
+      <!-- Activity Section -->
+      <div class="section-label">Today's Activity</div>
+      <div class="hero-grid">
+        <div class="hero-card accent-green">
+          <div class="card-icon"><i class="fas fa-shoe-prints"></i></div>
+          <div class="card-value"><span id="steps">–</span><span class="card-unit"> steps</span></div>
+          <div class="card-label">Goal: <span id="stepsGoal">10,000</span></div>
+          <div class="card-delta" id="stepsDelta"></div>
+          <div class="progress-bar"><div class="progress-fill" id="stepsProgress" style="background:#1D9E75;"></div></div>
+        </div>
+        <div class="hero-card accent-coral">
+          <div class="card-icon"><i class="fas fa-fire"></i></div>
+          <div class="card-value"><span id="calories">–</span><span class="card-unit"> kcal</span></div>
+          <div class="card-label">Active / <span id="totalCalories">–</span> BMR</div>
+          <div class="card-delta" id="caloriesDelta"></div>
+          <div class="progress-bar"><div class="progress-fill" id="caloriesProgress" style="background:#D85A30;"></div></div>
+        </div>
+        <div class="hero-card accent-blue">
+          <div class="card-icon"><i class="fas fa-clock"></i></div>
+          <div class="card-value"><span id="activeMin">–</span><span class="card-unit"> min</span></div>
+          <div class="card-label">Active minutes</div>
+          <div class="card-delta" id="activeMinDelta"></div>
+          <div class="progress-bar"><div class="progress-fill" id="activeMinProgress" style="background:#378ADD;"></div></div>
+        </div>
+      </div>
+
+      <!-- Mid row -->
+      <div class="mid-grid">
+        <div class="card-base">
+          <div class="chart-label-row">
+            <span class="chart-title">Steps — last 7 days</span>
+            <span class="chip active">7d</span>
+          </div>
+          <div style="position:relative;height:140px;">
+            <canvas id="stepsChart" role="img" aria-label="Bar chart of daily steps for the past 7 days"></canvas>
+          </div>
+        </div>
+        <div class="card-base">
+          <div class="chart-label-row"><span class="chart-title">Heart rate zones</span></div>
+          <div class="zone-grid" id="hrZones">
+            <div class="zone-row"><span class="zone-name">Peak</span><div class="zone-bar-wrap"><div class="zone-bar" id="zPeak" style="background:#D85A30;"></div></div><span class="zone-mins" id="zPeakMin">–</span></div>
+            <div class="zone-row"><span class="zone-name">Cardio</span><div class="zone-bar-wrap"><div class="zone-bar" id="zCardio" style="background:#EF9F27;"></div></div><span class="zone-mins" id="zCardioMin">–</span></div>
+            <div class="zone-row"><span class="zone-name">Fat burn</span><div class="zone-bar-wrap"><div class="zone-bar" id="zFat" style="background:#1D9E75;"></div></div><span class="zone-mins" id="zFatMin">–</span></div>
+            <div class="zone-row"><span class="zone-name">Rest</span><div class="zone-bar-wrap"><div class="zone-bar" id="zRest" style="background:#85B7EB;"></div></div><span class="zone-mins" id="zRestMin">–</span></div>
+          </div>
+          <div class="hr-footer">
+            <div><div class="hr-footer-label">Resting HR</div><div class="hr-footer-val"><span id="restingHR">–</span> <span class="hr-footer-unit">bpm</span></div></div>
+            <div><div class="hr-footer-label">HRV</div><div class="hr-footer-val"><span id="hrv">–</span> <span class="hr-footer-unit">ms</span></div></div>
+            <div><div class="hr-footer-label">SpO2</div><div class="hr-footer-val"><span id="spo2">–</span> <span class="hr-footer-unit">%</span></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sleep -->
+      <div class="card-base">
+        <div class="chart-label-row">
+          <span class="chart-title">Last night's sleep</span>
+          <span class="sleep-time-badge" id="sleepTime">–</span>
+        </div>
+        <div class="sleep-stages" id="sleepStages"></div>
+        <div class="sleep-legend">
+          <span class="sleep-legend-item"><span style="background:#85B7EB"></span>Awake</span>
+          <span class="sleep-legend-item"><span style="background:#378ADD"></span>Light</span>
+          <span class="sleep-legend-item"><span style="background:#185FA5"></span>Deep</span>
+          <span class="sleep-legend-item"><span style="background:#7F77DD"></span>REM</span>
+        </div>
+        <div class="sleep-grid">
+          <div class="sleep-stat"><div class="sleep-val" id="sleepTotal">–</div><div class="sleep-lbl">Total sleep</div></div>
+          <div class="sleep-stat"><div class="sleep-val" id="sleepScore">–</div><div class="sleep-lbl">Sleep score</div></div>
+          <div class="sleep-stat"><div class="sleep-val" id="sleepREM">–</div><div class="sleep-lbl">REM sleep</div></div>
+        </div>
+      </div>
+
+      <!-- Bottom row -->
+      <div class="bottom-grid">
+        <div class="card-base">
+          <div class="chart-label-row"><span class="chart-title">Vitals</span></div>
+          <div class="vitals-row">
+            <div class="vital-item">
+              <span class="vital-icon"><i class="fas fa-heart"></i></span>
+              <div class="vital-info"><div class="vital-name">Heart Rate</div><div class="vital-value" id="heartRate">–</div></div>
+              <span class="vital-badge good" id="hrBadge">–</span>
+            </div>
+            <div class="vital-item">
+              <span class="vital-icon"><i class="fas fa-lungs"></i></span>
+              <div class="vital-info"><div class="vital-name">Blood Oxygen</div><div class="vital-value" id="spo2Vital">–</div></div>
+              <span class="vital-badge good" id="spo2Badge">–</span>
+            </div>
+            <div class="vital-item">
+              <span class="vital-icon"><i class="fas fa-wind"></i></span>
+              <div class="vital-info"><div class="vital-name">Breathing Rate</div><div class="vital-value" id="breathRate">–</div></div>
+              <span class="vital-badge good">Normal</span>
+            </div>
+            <div class="vital-item">
+              <span class="vital-icon"><i class="fas fa-thermometer-half"></i></span>
+              <div class="vital-info"><div class="vital-name">Skin Temp</div><div class="vital-value" id="skinTemp">–</div></div>
+              <span class="vital-badge" id="tempBadge">–</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-base">
+          <div class="chart-label-row"><span class="chart-title">Weekly calories</span></div>
+          <div style="position:relative;height:100px;">
+            <canvas id="calChart" role="img" aria-label="Bar chart of weekly calories burned"></canvas>
+          </div>
+          <div class="cal-footer">
+            <div><div class="hr-footer-label">Avg/day</div><div class="hr-footer-val" id="calAvg">– kcal</div></div>
+            <div><div class="hr-footer-label">Weekly total</div><div class="hr-footer-val" id="calTotal">– kcal</div></div>
+          </div>
+        </div>
+
+        <div class="card-base">
+          <div class="chart-label-row"><span class="chart-title">Body metrics</span></div>
+          <div class="body-metrics">
+            <div class="body-metric"><div class="bm-val" id="weight">–</div><div class="bm-lbl">kg</div></div>
+            <div class="body-metric"><div class="bm-val" id="bmi">–</div><div class="bm-lbl">BMI</div></div>
+            <div class="body-metric"><div class="bm-val" id="bodyFat">–</div><div class="bm-lbl">body fat %</div></div>
+          </div>
+          <div class="distance-row">
+            <div class="card-icon" style="margin:0"><i class="fas fa-route"></i></div>
+            <div>
+              <div style="font-size:11px;color:var(--text-muted)">Distance today</div>
+              <div class="hr-footer-val"><span id="distance">–</span> <span class="hr-footer-unit">km</span></div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text-muted)">Floors</div>
+              <div class="hr-footer-val"><span id="floors">–</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Insight -->
+      <div class="insight-card" id="insightCard">
+        <i class="fas fa-lightbulb insight-icon"></i>
+        <div class="insight-text" id="insightText">Loading insight…</div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>
