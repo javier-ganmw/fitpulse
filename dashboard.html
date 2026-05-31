@@ -247,435 +247,377 @@
     </div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
   <script>
   const TOKEN_URL   = 'https://oauth2.googleapis.com/token';
-  const HEALTH_BASE = 'https://health.googleapis.com/v4';
-  const TIMEOUT_MS  = 12000;
+  const BASE        = 'https://health.googleapis.com/v4';
+  const TIMEOUT_MS  = 15000;
 
   // ── UTILS ─────────────────────────────────────────────
   function getToken()   { return sessionStorage.getItem('google_access_token'); }
   function disconnect() { sessionStorage.clear(); window.location.href='index.html'; }
-  function setText(id,v){ const e=document.getElementById(id); if(e) e.textContent=v; }
-  function setProgress(id,r){ const e=document.getElementById(id); if(e) e.style.width=Math.min(100,Math.round(r*100))+'%'; }
-  function minsToHM(m){ const h=Math.floor(m/60),mm=m%60; return h>0?`${h}h ${mm}m`:`${mm}m`; }
-  function setStatus(msg){ setText('loadStatus', msg); }
+  function setText(id,v){ const e=document.getElementById(id); if(e) e.textContent=(v??'–'); }
+  function setProgress(id,r){ const e=document.getElementById(id); if(e) e.style.width=Math.min(100,Math.round((r||0)*100))+'%'; }
+  function minsToHM(m){ m=Math.round(m||0); const h=Math.floor(m/60),mm=m%60; return h>0?`${h}h ${mm}m`:`${mm}m`; }
 
   function localDate(offsetDays=0){
     const d=new Date(); d.setDate(d.getDate()-offsetDays);
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   }
 
-  // Fetch with timeout
-  async function fetchWithTimeout(url, opts={}, ms=TIMEOUT_MS){
-    const ctrl = new AbortController();
-    const timer = setTimeout(()=>ctrl.abort(), ms);
-    try {
-      const r = await fetch(url, { ...opts, signal: ctrl.signal });
-      clearTimeout(timer);
-      return r;
-    } catch(e) {
-      clearTimeout(timer);
-      throw e.name==='AbortError' ? new Error(`Timeout after ${ms/1000}s`) : e;
-    }
+  // Build CivilDateTime objects exactly as the API spec requires
+  function civilDT(dateStr, isEnd=false) {
+    const [y,m,d] = dateStr.split('-').map(Number);
+    return isEnd
+      ? { date:{year:y,month:m,day:d}, time:{hours:23,minutes:59,seconds:59,nanos:0} }
+      : { date:{year:y,month:m,day:d}, time:{hours:0, minutes:0, seconds:0, nanos:0} };
   }
 
-  // ── API CORE ──────────────────────────────────────────
-  async function healthFetch(path, opts={}){
+  // Fetch with hard timeout
+  async function timedFetch(url, opts={}) {
+    const ctrl = new AbortController();
+    const t = setTimeout(()=>ctrl.abort(), TIMEOUT_MS);
+    try {
+      const r = await fetch(url, {...opts, signal:ctrl.signal});
+      clearTimeout(t); return r;
+    } catch(e) { clearTimeout(t); throw e.name==='AbortError'?new Error('Timeout'):e; }
+  }
+
+  async function apiFetch(path, opts={}) {
     const token = getToken();
     if (!token) { disconnect(); throw new Error('No token'); }
-    const resp = await fetchWithTimeout(HEALTH_BASE + path, {
+    const r = await timedFetch(BASE+path, {
       ...opts,
-      headers: { Authorization:'Bearer '+token, 'Content-Type':'application/json', ...(opts.headers||{}) }
+      headers:{ Authorization:'Bearer '+token, 'Content-Type':'application/json', ...(opts.headers||{}) }
     });
-    if (resp.status===401){ disconnect(); throw new Error('Token expired'); }
-    const json = await resp.json();
-    if (!resp.ok) throw new Error(json?.error?.message || `HTTP ${resp.status}`);
+    if (r.status===401) { disconnect(); throw new Error('Token expired'); }
+    const json = await r.json();
+    if (!r.ok) throw new Error(json?.error?.message || `HTTP ${r.status}`);
     return json;
   }
 
-  // Safe wrapper — never throws, returns { data, error }
-  async function safe(label, fn){
-    try {
-      const data = await fn();
-      return { label, data, error: null };
-    } catch(e) {
-      return { label, data: null, error: e.message };
-    }
-  }
-
-  // Build the nested civil time range object the API actually wants
-  function civilRange(startDate, endDate) {
-    function parseDateParts(d) {
-      const [y,m,day] = d.split('-').map(Number);
-      return { date: { year:y, month:m, day }, time: { hours:0, minutes:0, seconds:0, nanos:0 } };
-    }
-    function endDateParts(d) {
-      const [y,m,day] = d.split('-').map(Number);
-      return { date: { year:y, month:m, day }, time: { hours:23, minutes:59, seconds:59, nanos:0 } };
-    }
-    return { start: parseDateParts(startDate), end: endDateParts(endDate) };
-  }
-
-  // dailyRollUp POST — correct body format per API docs
-  async function rollUp(dataType, startDate, endDate){
-    const numDays = Math.max(1, Math.round((new Date(endDate) - new Date(startDate)) / 86400000) + 1);
-    return healthFetch(`/users/-/dataTypes/${dataType}/dataPoints:dailyRollUp`, {
+  // POST dailyRollUp — uses CivilTimeInterval range
+  async function dailyRollUp(dataType, startDate, endDate) {
+    return apiFetch(`/users/me/dataTypes/${dataType}/dataPoints:dailyRollUp`, {
       method:'POST',
-      body: JSON.stringify({ range: civilRange(startDate, endDate), windowSizeDays: 1 })
+      body: JSON.stringify({
+        range: { start: civilDT(startDate, false), end: civilDT(endDate, true) },
+        windowSizeDays: 1
+      })
     });
   }
 
-  // list GET — use filter param per API docs
-  async function listPoints(dataType, dateStr){
-    const filter = encodeURIComponent(`${dataType.replace(/-/g,'_')}.interval.civil_start_time >= "${dateStr}T00:00:00" AND ${dataType.replace(/-/g,'_')}.interval.civil_start_time <= "${dateStr}T23:59:59"`);
-    return healthFetch(`/users/-/dataTypes/${dataType}/dataPoints?filter=${filter}`);
+  // GET list with civil_start_time filter
+  async function listToday(dataType, dateStr) {
+    // snake_case the datatype for filter field name
+    const field = dataType.replace(/-/g,'_');
+    const f = encodeURIComponent(`${field}.interval.civil_start_time >= "${dateStr}T00:00:00"`);
+    return apiFetch(`/users/me/dataTypes/${dataType}/dataPoints?filter=${f}&pageSize=10`);
   }
 
-  // Extract today's rollup datapoint from response
-  // API returns { rollupDataPoints: [{ civilStartTime: { date: {year,month,day} }, steps: {...}, ... }] }
-  function getRollup(data, date){
-    if (!data?.rollupDataPoints?.length) return null;
-    const d = date || localDate();
-    const [ty,tm,tday] = d.split('-').map(Number);
-    const pt = data.rollupDataPoints.find(r => {
-      const rd = r.civilStartTime?.date;
-      return rd && rd.year===ty && rd.month===tm && rd.day===tday;
-    }) ?? data.rollupDataPoints[data.rollupDataPoints.length-1];
-    // Return the datapoint itself — callers will pick the right field
-    return pt ?? null;
+  // Safe wrapper — returns { label, data, error }
+  async function safe(label, fn) {
+    try { return { label, data: await fn(), error:null }; }
+    catch(e) { return { label, data:null, error:e.message }; }
+  }
+
+  // Get today's point from rollupDataPoints array
+  function getToday(resp, dateStr) {
+    if (!resp?.rollupDataPoints?.length) return null;
+    const [ty,tm,td] = (dateStr||localDate()).split('-').map(Number);
+    return resp.rollupDataPoints.find(p => {
+      const d=p.civilStartTime?.date; return d&&d.year===ty&&d.month===tm&&d.day===td;
+    }) ?? resp.rollupDataPoints[resp.rollupDataPoints.length-1] ?? null;
   }
 
   // ── OAUTH CALLBACK ────────────────────────────────────
-  async function maybeHandleCallback(){
-    const params     = new URLSearchParams(window.location.search);
-    const code       = params.get('code');
-    const state      = params.get('state');
-    const oauthError = params.get('error');
+  async function maybeHandleCallback() {
+    const p=new URLSearchParams(window.location.search);
+    const code=p.get('code'), state=p.get('state'), err=p.get('error');
+    if (err) { showDebug([{label:'OAuth error',data:null,error:err}]); return; }
+    if (!code) { getToken()?loadDashboard():window.location.href='index.html'; return; }
 
-    if (oauthError){ showDebug([{label:'OAuth', data:null, error:oauthError}]); return; }
+    const savedState=sessionStorage.getItem('oauth_state');
+    const clientId=sessionStorage.getItem('google_client_id');
+    const clientSecret=sessionStorage.getItem('google_client_secret');
+    const redirectUri=sessionStorage.getItem('redirect_uri');
 
-    if (!code){
-      // No code — check if already logged in
-      if (!getToken()){ window.location.href='index.html'; return; }
-      loadDashboard(); return;
-    }
-
-    const savedState   = sessionStorage.getItem('oauth_state');
-    const clientId     = sessionStorage.getItem('google_client_id');
-    const clientSecret = sessionStorage.getItem('google_client_secret');
-    const redirectUri  = sessionStorage.getItem('redirect_uri');
-
-    if (!clientId||!clientSecret){ showDebug([{label:'Credentials missing', data:null, error:'Go back to index.html and re-enter your Client ID and Secret'}]); return; }
-    if (state!==savedState){ showDebug([{label:'State mismatch', data:null, error:'Security check failed — please reconnect'}]); return; }
-
-    window.history.replaceState({}, '', window.location.pathname);
-    setStatus('Exchanging authorization code…');
+    if (!clientId||!clientSecret) { showDebug([{label:'Missing credentials',data:null,error:'Go back to index.html and reconnect'}]); return; }
+    if (state!==savedState) { showDebug([{label:'State mismatch',data:null,error:'Security check failed — reconnect'}]); return; }
+    window.history.replaceState({},'',window.location.pathname);
 
     try {
-      const resp = await fetchWithTimeout(TOKEN_URL, {
-        method:'POST',
-        headers:{'Content-Type':'application/x-www-form-urlencoded'},
-        body: new URLSearchParams({ code, client_id:clientId, client_secret:clientSecret, redirect_uri:redirectUri, grant_type:'authorization_code' })
+      const r=await timedFetch(TOKEN_URL,{
+        method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body:new URLSearchParams({code,client_id:clientId,client_secret:clientSecret,redirect_uri:redirectUri,grant_type:'authorization_code'})
       });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error_description || data.error || `HTTP ${resp.status}`);
-      sessionStorage.setItem('google_access_token', data.access_token);
-      if (data.refresh_token) sessionStorage.setItem('google_refresh_token', data.refresh_token);
-      sessionStorage.setItem('token_expiry', Date.now()+(data.expires_in||3600)*1000);
+      const d=await r.json();
+      if(!r.ok) throw new Error(d.error_description||d.error||`HTTP ${r.status}`);
+      sessionStorage.setItem('google_access_token',d.access_token);
+      if(d.refresh_token) sessionStorage.setItem('google_refresh_token',d.refresh_token);
+      sessionStorage.setItem('token_expiry',Date.now()+(d.expires_in||3600)*1000);
       sessionStorage.removeItem('oauth_state');
       loadDashboard();
-    } catch(e){
-      showDebug([{label:'Token exchange', data:null, error:e.message}]);
-    }
+    } catch(e) { showDebug([{label:'Token exchange failed',data:null,error:e.message}]); }
   }
 
-  // ── LOAD DASHBOARD ────────────────────────────────────
-  async function loadDashboard(){
-    document.getElementById('loadingState').style.display='flex';
-    document.getElementById('debugPanel').style.display='none';
-    document.getElementById('dashContent').style.display='none';
+  // ── LOAD ──────────────────────────────────────────────
+  async function loadDashboard() {
+    showState('loading');
+    const t=localDate(), t6=localDate(6);
 
-    const t  = localDate();
-    const t6 = localDate(6);
-
-
-
-    setStatus('Fetching profile…');
     const results = await Promise.all([
-      safe('profile',            ()=>healthFetch('/users/me/identity')),
-      safe('steps (today)',      ()=>rollUp('steps', t, t)),
-      safe('steps (7d)',         ()=>rollUp('steps', t6, t)),
-      safe('active-energy',      ()=>rollUp('active-energy-burned', t, t)),
-      safe('active-energy (7d)', ()=>rollUp('active-energy-burned', t6, t)),
-      safe('active-minutes',     ()=>rollUp('active-minutes', t, t)),
-      safe('distance',           ()=>rollUp('distance', t, t)),
-      safe('floors',             ()=>rollUp('floors', t, t)),
-      safe('hr-zones',           ()=>rollUp('daily-heart-rate-zones', t, t)),
-      safe('resting-hr',         ()=>rollUp('daily-resting-heart-rate', t, t)),
-      safe('hrv',                ()=>rollUp('daily-heart-rate-variability', t, t)),
-      safe('spo2',               ()=>rollUp('daily-oxygen-saturation', t, t)),
-      safe('breathing-rate',     ()=>rollUp('daily-respiratory-rate', t, t)),
-      safe('skin-temp',          ()=>rollUp('daily-sleep-temperature-derivations', t, t)),
-      safe('sleep',              ()=>listPoints('sleep', t)),
-      safe('weight',             ()=>rollUp('weight', t, t)),
-      safe('body-fat',           ()=>rollUp('body-fat', t, t)),
+      safe('profile',            ()=>apiFetch('/users/me/identity')),
+      // dailyRollUp data types
+      safe('steps (today)',      ()=>dailyRollUp('steps', t, t)),
+      safe('steps (7d)',         ()=>dailyRollUp('steps', t6, t)),
+      safe('total-calories',     ()=>dailyRollUp('total-calories', t, t)),
+      safe('total-calories (7d)',()=>dailyRollUp('total-calories', t6, t)),
+      safe('active-minutes',     ()=>dailyRollUp('active-minutes', t, t)),
+      safe('distance',           ()=>dailyRollUp('distance', t, t)),
+      safe('floors',             ()=>dailyRollUp('floors', t, t)),
+      safe('weight',             ()=>dailyRollUp('weight', t6, t)),
+      safe('body-fat',           ()=>dailyRollUp('body-fat', t6, t)),
+      safe('time-in-hr-zone',    ()=>dailyRollUp('time-in-heart-rate-zone', t, t)),
+      safe('heart-rate',         ()=>dailyRollUp('heart-rate', t, t)),
+      // list data types (daily summaries — use list endpoint)
+      safe('resting-hr',         ()=>listToday('daily-resting-heart-rate', t)),
+      safe('hrv',                ()=>listToday('daily-heart-rate-variability', t)),
+      safe('spo2',               ()=>listToday('daily-oxygen-saturation', t)),
+      safe('breathing-rate',     ()=>listToday('daily-respiratory-rate', t)),
+      safe('skin-temp',          ()=>listToday('daily-sleep-temperature-derivations', t)),
+      safe('sleep',              ()=>listToday('sleep', t)),
     ]);
 
-    setStatus('');
-    document.getElementById('loadingState').style.display='none';
-
-    // Check if every single call errored
-    const allFailed = results.every(r=>r.error!==null);
-    // Check if critical calls (profile + steps) both failed
-    const criticalFailed = results[0].error && results[1].error;
-
-    // Build debug rows
     showDebug(results);
-
-    if (!criticalFailed){
-      // Render whatever we got
-      const d = Object.fromEntries(results.map(r=>[r.label, r.data]));
-      renderAll(d, results);
-      document.getElementById('dashContent').style.display='block';
-    }
+    const d={};
+    results.forEach(r=>{ d[r.label]=r.data; });
+    renderAll(d, t);
+    showState('content');
   }
 
-  // ── DEBUG PANEL ───────────────────────────────────────
-  function showDebug(results){
-    const panel = document.getElementById('debugPanel');
-    const rows  = document.getElementById('debugRows');
-    rows.innerHTML = '';
+  // ── STATE ─────────────────────────────────────────────
+  function showState(s) {
+    document.getElementById('loadingState').style.display=s==='loading'?'flex':'none';
+    document.getElementById('dashContent').style.display=s==='content'?'block':'none';
+  }
 
-    let anyError = false;
+  function showDebug(results) {
+    const panel=document.getElementById('debugPanel');
+    const rows=document.getElementById('debugRows');
+    rows.innerHTML='';
+    let anyErr=false;
     results.forEach(r=>{
-      const row = document.createElement('div');
-      row.className = 'debug-row';
-      const hasData = r.data !== null && r.data !== undefined;
-      const isEmpty = hasData && JSON.stringify(r.data) === '{}';
-      const icon = r.error ? '✗' : isEmpty ? '○' : '✓';
-      const cls  = r.error ? 's-err' : isEmpty ? 's-empty' : 's-ok';
-      if (r.error) anyError = true;
-
-      // Show first key of response or error message
-      let preview = '';
-      if (r.error)      preview = r.error;
-      else if (hasData) preview = JSON.stringify(r.data).slice(0,120);
-
-      row.innerHTML = `<span class="debug-status ${cls}">${icon}</span><span class="debug-name">${r.label}</span><span class="debug-val">${preview}</span>`;
+      const ok=r.error===null, empty=ok&&JSON.stringify(r.data)==='{}';
+      const icon=r.error?'✗':empty?'○':'✓';
+      const cls=r.error?'s-err':empty?'s-empty':'s-ok';
+      if(r.error) anyErr=true;
+      const preview=r.error?r.error:JSON.stringify(r.data).slice(0,140);
+      const row=document.createElement('div'); row.className='debug-row';
+      row.innerHTML=`<span class="debug-status ${cls}">${icon}</span><span class="debug-name">${r.label}</span><span class="debug-val">${preview}</span>`;
       rows.appendChild(row);
     });
-
-    if (anyError) panel.style.display='block';
+    panel.style.display=anyErr?'block':'none';
   }
 
   // ── RENDER ────────────────────────────────────────────
   let stepsChart, calChart;
 
-  function renderAll(d, results){
+  function renderAll(d, t) {
     renderProfile(d['profile']);
-    renderActivity(d['steps (today)'], d['active-energy'], d['active-minutes'], d['distance'], d['floors']);
-    renderWeeklySteps(d['steps (7d)']);
-    renderHRZones(d['hr-zones'], d['resting-hr'], d['hrv'], d['spo2']);
+    renderActivity(d, t);
+    renderWeeklySteps(d['steps (7d)'], t);
+    renderHR(d['resting-hr'], d['hrv'], d['spo2'], d['time-in-hr-zone'], t);
     renderSleep(d['sleep']);
-    renderVitals(d['resting-hr'], d['spo2'], d['breathing-rate'], d['skin-temp']);
-    renderWeeklyCalories(d['active-energy (7d)']);
-    renderBody(d['weight'], d['body-fat']);
-    renderInsight(d['steps (today)'], d['sleep']);
+    renderVitals(d['resting-hr'], d['spo2'], d['breathing-rate'], d['skin-temp'], t);
+    renderWeeklyCalories(d['total-calories (7d)'], t);
+    renderBody(d['weight'], d['body-fat'], t);
+    renderInsight(d, t);
   }
 
-  function renderProfile(p){
-    if (!p) return;
-    // identity endpoint returns { legacyUserId, healthUserId } — no display name
-    // Fall back to showing the legacy user ID or 'You'
-    const name = p.displayName || p.givenName || p.legacyUserId || 'You';
+  function renderProfile(p) {
+    if(!p) return;
+    const name=p.displayName||p.givenName||p.legacyUserId||'You';
     setText('userName', name);
-    document.getElementById('userAvatar').textContent = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    document.getElementById('userAvatar').textContent=name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   }
 
-  function renderActivity(stepsD, calD, activeD, distD, floorsD){
-    const sr = getRollup(stepsD);
-    const steps  = parseInt(sr?.steps?.countSum ?? sr?.steps?.count ?? 0);
-    const cr = getRollup(calD);
-    const cal    = Math.round(parseFloat(cr?.activeEnergyBurned?.kilocalories ?? cr?.activeEnergyBurned?.value ?? 0));
-    const ar = getRollup(activeD);
-    const active = Math.round(parseFloat(ar?.activeMinutes?.minutes ?? ar?.activeMinutes?.count ?? 0));
-    const dr = getRollup(distD);
-    const distMm = parseFloat(dr?.distance?.millimeters ?? dr?.distance?.value ?? 0);
-    const fr = getRollup(floorsD);
-    const floors = Math.round(parseFloat(fr?.floors?.countSum ?? fr?.floors?.count ?? 0));
+  function renderActivity(d, t) {
+    const sp=getToday(d['steps (today)'],t);
+    const cp=getToday(d['total-calories'],t);
+    const ap=getToday(d['active-minutes'],t);
+    const dp=getToday(d['distance'],t);
+    const fp=getToday(d['floors'],t);
+
+    const steps  = parseInt(sp?.steps?.countSum??0);
+    const cal    = Math.round(parseFloat(cp?.totalCalories?.kilocalories??0));
+    const active = Math.round(parseFloat(ap?.activeMinutes?.minutesSum??ap?.activeMinutes?.minutes??0));
+    const distM  = parseFloat(dp?.distance?.metersSum??dp?.distance?.meters??0);
+    const floors = Math.round(parseFloat(fp?.floors?.countSum??0));
 
     setText('steps',    steps.toLocaleString());
     setText('calories', cal.toLocaleString());
     setText('activeMin',active);
-    setText('distance', (distMm/1_000_000).toFixed(2));
+    setText('distance', (distM/1000).toFixed(2));
     setText('floors',   floors);
     setProgress('stepsProgress',    steps/10000);
-    setProgress('caloriesProgress', cal/600);
+    setProgress('caloriesProgress', cal/2000);
     setProgress('activeMinProgress',active/30);
-    setDelta('stepsDelta',    steps,  10000, 'step goal');
-    setDelta('activeMinDelta',active, 30,    'min goal');
+
+    const sd=steps-10000;
+    document.getElementById('stepsDelta').className='card-delta '+(sd>=0?'up':'down');
+    document.getElementById('stepsDelta').innerHTML=sd>=0
+      ?`<i class="fas fa-arrow-up"></i> +${Math.abs(sd).toLocaleString()} above goal`
+      :`<i class="fas fa-arrow-down"></i> ${Math.abs(sd).toLocaleString()} below goal`;
+    const ad=active-30;
+    document.getElementById('activeMinDelta').className='card-delta '+(ad>=0?'up':'down');
+    document.getElementById('activeMinDelta').innerHTML=ad>=0
+      ?`<i class="fas fa-arrow-up"></i> +${Math.abs(ad)} above goal`
+      :`<i class="fas fa-arrow-down"></i> ${Math.abs(ad)} below goal`;
   }
 
-  function setDelta(id, val, goal, unit){
-    const el=document.getElementById(id); if(!el) return;
-    const diff=val-goal;
-    el.className='card-delta '+(diff>=0?'up':'down');
-    el.innerHTML=diff>=0
-      ?`<i class="fas fa-arrow-up"></i> +${Math.abs(diff).toLocaleString()} above ${unit}`
-      :`<i class="fas fa-arrow-down"></i> ${Math.abs(diff).toLocaleString()} below ${unit}`;
-  }
-
-  function renderWeeklySteps(ws){
-    if (!ws?.rollupValues) return;
-    const entries = ws.rollupDataPoints.slice(-7);
-    const labels  = entries.map(e=>{
-      const cd = e.civilStartTime?.date;
-      if(!cd) return '?';
-      const d = new Date(cd.year, cd.month-1, cd.day);
-      return ['S','M','T','W','T','F','S'][d.getDay()];
-    });
-    const values  = entries.map(e=>parseInt(e.steps?.countSum ?? e.steps?.count ?? 0));
-    const [ty,tm,tday] = localDate().split('-').map(Number);
-    const colors  = entries.map((e,i)=>{
-      const cd=e.civilStartTime?.date;
-      const isToday = cd && cd.year===ty && cd.month===tm && cd.day===tday;
-      return isToday?'#1D9E75':values[i]>=10000?'#5DCAA5':'#9FE1CB';
-    });
-    if (stepsChart) stepsChart.destroy();
-    stepsChart = new Chart(document.getElementById('stepsChart'),{
-      type:'bar', data:{labels, datasets:[{data:values, backgroundColor:colors, borderRadius:4, borderSkipped:false}]},
-      options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>c.parsed.y.toLocaleString()+' steps'}}}, scales:{x:{grid:{display:false},ticks:{color:'#888780',font:{size:11}}}, y:{display:false}}}
+  function renderWeeklySteps(ws, t) {
+    if (!ws?.rollupDataPoints) return;
+    const pts=ws.rollupDataPoints.slice(-7);
+    const labels=pts.map(p=>{ const cd=p.civilStartTime?.date; return cd?['S','M','T','W','T','F','S'][new Date(cd.year,cd.month-1,cd.day).getDay()]:'?'; });
+    const values=pts.map(p=>parseInt(p.steps?.countSum??0));
+    const [ty,tm,td]=t.split('-').map(Number);
+    const colors=pts.map((p,i)=>{ const cd=p.civilStartTime?.date; const today=cd&&cd.year===ty&&cd.month===tm&&cd.day===td; return today?'#1D9E75':values[i]>=10000?'#5DCAA5':'#9FE1CB'; });
+    if(stepsChart) stepsChart.destroy();
+    stepsChart=new Chart(document.getElementById('stepsChart'),{
+      type:'bar', data:{labels,datasets:[{data:values,backgroundColor:colors,borderRadius:4,borderSkipped:false}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y.toLocaleString()+' steps'}}},scales:{x:{grid:{display:false},ticks:{color:'#888780',font:{size:11}}},y:{display:false}}}
     });
   }
 
-  function renderHRZones(zonesD, restingD, hrvD, spo2D){
-    const rhrPt = getRollup(restingD);
-    const rhr  = parseFloat(rhrPt?.dailyRestingHeartRate?.beatsPerMinute ?? rhrPt?.dailyRestingHeartRate?.value ?? 0) || null;
-    const hrvPt = getRollup(hrvD);
-    const hrv  = parseFloat(hrvPt?.dailyHeartRateVariability?.milliseconds ?? hrvPt?.dailyHeartRateVariability?.value ?? 0) || null;
-    const spo2Pt = getRollup(spo2D);
-    const spo2 = parseFloat(spo2Pt?.dailyOxygenSaturation?.percent ?? spo2Pt?.dailyOxygenSaturation?.value ?? 0) || null;
-    const z    = getRollup(zonesD)?.dailyHeartRateZones ?? getRollup(zonesD);
+  function renderHR(restingD, hrvD, spo2D, zonesD, t) {
+    // resting HR from list endpoint: dataPoints[].dailyRestingHeartRate.beatsPerMinute
+    const rhrPts=restingD?.dataPoints??[];
+    const rhr=parseFloat(rhrPts[0]?.dailyRestingHeartRate?.beatsPerMinute??0)||null;
+    if(rhr){ setText('restingHR',Math.round(rhr)); setText('heartRate',Math.round(rhr)+' bpm'); }
 
-    if (rhr){ setText('restingHR',Math.round(rhr)); setText('heartRate',Math.round(rhr)+' bpm'); }
-    if (hrv)  setText('hrv', Math.round(hrv));
-    if (spo2){ const v=Math.round(spo2); setText('spo2',v); setText('spo2Vital',v+'%'); }
+    // HRV: dataPoints[].dailyHeartRateVariability.averageHeartRateVariabilityMilliseconds
+    const hrvPts=hrvD?.dataPoints??[];
+    const hrv=parseFloat(hrvPts[0]?.dailyHeartRateVariability?.averageHeartRateVariabilityMilliseconds??0)||null;
+    if(hrv) setText('hrv',Math.round(hrv));
 
-    if (z){
-      const setZ=(bId,mId,mins,max)=>{
-        const bar=document.getElementById(bId), el=document.getElementById(mId);
+    // SpO2: dataPoints[].dailyOxygenSaturation.averagePercent
+    const spo2Pts=spo2D?.dataPoints??[];
+    const spo2=parseFloat(spo2Pts[0]?.dailyOxygenSaturation?.averagePercent??0)||null;
+    if(spo2){ const v=Math.round(spo2); setText('spo2',v); setText('spo2Vital',v+'%'); }
+
+    // HR zones from dailyRollUp: timeInHeartRateZone.zones[{name,minutes}]
+    const zp=getToday(zonesD,t);
+    if(zp?.timeInHeartRateZone?.zones){
+      const zones=zp.timeInHeartRateZone.zones;
+      const setZ=(bId,mId,name,max)=>{
+        const z=zones.find(z=>z.name===name); const mins=parseInt(z?.minutesSum??z?.minutes??0);
+        const bar=document.getElementById(bId),el=document.getElementById(mId);
         if(bar) bar.style.width=Math.round((mins/max)*100)+'%';
-        if(el)  el.textContent=mins<60?`${mins}m`:`${Math.floor(mins/60)}h ${mins%60}m`;
+        if(el) el.textContent=mins<60?`${mins}m`:`${Math.floor(mins/60)}h ${mins%60}m`;
       };
-      setZ('zPeak',  'zPeakMin',   parseInt(z.peakMinutes??z.zones?.find(zn=>zn.name==='PEAK')?.minutes??0),       60);
-      setZ('zCardio','zCardioMin', parseInt(z.cardioMinutes??z.zones?.find(zn=>zn.name==='CARDIO')?.minutes??0),      90);
-      setZ('zFat',   'zFatMin',    parseInt(z.fatBurnMinutes??z.zones?.find(zn=>zn.name==='FAT_BURN')?.minutes??0),    120);
-      setZ('zRest',  'zRestMin',   parseInt(z.outOfRangeMinutes??z.zones?.find(zn=>zn.name==='OUT_OF_RANGE')?.minutes??0), 1440);
+      setZ('zPeak',  'zPeakMin',  'PEAK',         60);
+      setZ('zCardio','zCardioMin','CARDIO',        90);
+      setZ('zFat',   'zFatMin',   'FAT_BURN',     120);
+      setZ('zRest',  'zRestMin',  'OUT_OF_RANGE', 1440);
     }
 
-    if (rhr){ const b=document.getElementById('hrBadge'); if(b){b.textContent=rhr<60?'Low':rhr<=100?'Normal':'High'; b.className='vital-badge '+(rhr>=60&&rhr<=100?'good':'warn');} }
-    if (spo2){ const v=Math.round(spo2),b=document.getElementById('spo2Badge'); if(b){b.textContent=v>=95?'Optimal':v>=90?'Low':'Very low'; b.className='vital-badge '+(v>=95?'good':'warn');} }
+    // Badges
+    if(rhr){ const b=document.getElementById('hrBadge'); if(b){b.textContent=rhr<60?'Low':rhr<=100?'Normal':'High';b.className='vital-badge '+(rhr>=60&&rhr<=100?'good':'warn');} }
+    if(spo2){ const v=Math.round(spo2),b=document.getElementById('spo2Badge'); if(b){b.textContent=v>=95?'Optimal':v>=90?'Low':'Very low';b.className='vital-badge '+(v>=95?'good':'warn');} }
   }
 
-  function renderSleep(sleepD){
-    const points = sleepD?.dataPoints;
-    if (!points?.length) return;
-    const main = points[0];
-    const _st = (main?.sleep??main)?.interval?.startTime ?? main?.start_time ?? main?.startTime;
-    const _et = (main?.sleep??main)?.interval?.endTime   ?? main?.end_time   ?? main?.endTime;
-    if (!_st && totalMins === 0) return; // no usable time data
+  function renderSleep(sleepD) {
+    const pts=sleepD?.dataPoints??[];
+    // Find main sleep (main:true or longest)
+    const main=pts.find(p=>p.sleep?.metadata?.main===true)??pts.sort((a,b)=>{
+      const dur=p=>p.sleep?.interval?(new Date(p.sleep.interval.endTime)-new Date(p.sleep.interval.startTime)):0;
+      return dur(b)-dur(a);
+    })[0];
+    if(!main) return;
+    const sl=main.sleep;
+    if(!sl) return;
 
-    const fmt = s=>new Date(s).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
-    const sleepObj = main.sleep ?? main;
-    const startT = sleepObj.interval?.startTime ?? main.start_time ?? main.startTime;
-    const endT   = sleepObj.interval?.endTime   ?? main.end_time   ?? main.endTime;
-    if(startT && endT) setText('sleepTime', `${fmt(startT)} – ${fmt(endT)}`);
-    const totalMins = startT && endT ? (new Date(endT)-new Date(startT))/(1000*60) : 0;
-    // API response: sleep.stages[] with {startTime,endTime,type} and sleep.summary
-    const sleepData = main.sleep ?? main;
-    const summary = sleepData.summary;
-    const stages = sleepData.stages ?? [];
-    const stageSecs = (type) => stages.filter(s=>s.type===type).reduce((a,s)=>{
-      if(!s.startTime||!s.endTime) return a;
-      return a + (new Date(s.endTime)-new Date(s.startTime))/1000;
-    },0);
-    const levels = stages.map(s=>({level:s.type, seconds: s.startTime&&s.endTime?(new Date(s.endTime)-new Date(s.startTime))/1000:0}));
-    const awakeMins = summary ? parseInt(summary.minutesAwake??0) : stageSecs('AWAKE')/60;
-    const remMins   = summary ? parseInt(summary.stagesSummary?.find(s=>s.type==='REM')?.minutes??0) : stageSecs('REM')/60;
-    const asleepMins = summary ? parseInt(summary.minutesAsleep??0) : Math.max(0,Math.round(totalMins-awakeMins));
-    const sleepMins = asleepMins || Math.max(0, Math.round(totalMins - awakeMins));
+    const startT=sl.interval?.startTime, endT=sl.interval?.endTime;
+    if(startT&&endT){
+      const fmt=s=>new Date(s).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
+      setText('sleepTime',`${fmt(startT)} – ${fmt(endT)}`);
+    }
 
-    setText('sleepTotal',      minsToHM(sleepMins));
-    setText('sleepEfficiency', summary ? Math.round((sleepMins/Math.max(1,totalMins))*100) : (totalMins>0?Math.round((sleepMins/totalMins)*100):'–'));
-    setText('sleepREM',        minsToHM(Math.round(remMins)));
+    const sum=sl.summary;
+    if(sum){
+      setText('sleepTotal',   minsToHM(parseInt(sum.minutesAsleep??0)));
+      setText('sleepEfficiency', Math.round(parseInt(sum.minutesAsleep??0)/Math.max(1,parseInt(sum.minutesInSleepPeriod??1))*100)+'%');
+      const rem=sum.stagesSummary?.find(s=>s.type==='REM');
+      setText('sleepREM', minsToHM(parseInt(rem?.minutes??0)));
+    }
 
-    const cont = document.getElementById('sleepStages'); cont.innerHTML='';
-    const colors={WAKE:'#85B7EB',AWAKE:'#85B7EB',LIGHT:'#378ADD',DEEP:'#185FA5',REM:'#7F77DD',N1:'#9FE1CB',N2:'#378ADD',N3:'#185FA5'};
-    const stagesToDraw = stages.length ? stages : levels;
-    const totalSecs = stagesToDraw.reduce((a,l)=>a+(l.seconds||0),0)||1;
-    stagesToDraw.forEach(seg=>{
+    // Stage visualization
+    const cont=document.getElementById('sleepStages'); cont.innerHTML='';
+    const stages=sl.stages??[];
+    const colors={WAKE:'#85B7EB',AWAKE:'#85B7EB',LIGHT:'#378ADD',DEEP:'#185FA5',REM:'#7F77DD'};
+    const totalSecs=stages.reduce((a,s)=>{
+      return a+(s.startTime&&s.endTime?(new Date(s.endTime)-new Date(s.startTime))/1000:0);
+    },0)||1;
+    stages.forEach(s=>{
+      const secs=s.startTime&&s.endTime?(new Date(s.endTime)-new Date(s.startTime))/1000:0;
+      if(!secs) return;
       const div=document.createElement('div'); div.className='stage-seg';
-      div.style.flex=((seg.seconds||0)/totalSecs*100).toFixed(1);
-      div.style.background=colors[(seg.type??seg.level)?.toUpperCase()]||'#85B7EB';
+      div.style.flex=(secs/totalSecs*100).toFixed(1);
+      div.style.background=colors[s.type?.toUpperCase()]||'#85B7EB';
       div.style.borderRadius='3px';
+      div.title=`${s.type} – ${Math.round(secs/60)}min`;
       cont.appendChild(div);
     });
   }
 
-  function renderVitals(restingD, spo2D, brD, tempD){
-    const brPt = getRollup(brD);
-    const br   = parseFloat(brPt?.dailyRespiratoryRate?.breathsPerMinute ?? brPt?.dailyRespiratoryRate?.value ?? 0) || null;
-    const tempPt = getRollup(tempD);
-    const temp = parseFloat(tempPt?.dailySleepTemperatureDerivations?.celsiusDegrees ?? tempPt?.dailySleepTemperatureDerivations?.value ?? 0) || null;
-    if (br)   setText('breathRate', Math.round(br)+' /min');
-    if (temp!=null){
-      setText('skinTemp',(temp>=0?'+':'')+Number(temp).toFixed(1)+' °C');
+  function renderVitals(restingD, spo2D, brD, tempD, t) {
+    const br=parseFloat(brD?.dataPoints?.[0]?.dailyRespiratoryRate?.breathsPerMinute??0)||null;
+    if(br) setText('breathRate',Math.round(br)+' /min');
+    const temp=parseFloat(tempD?.dataPoints?.[0]?.dailySleepTemperatureDerivations?.relativeTemperatureCelsius??0)||null;
+    if(temp!=null&&temp!==0){
+      setText('skinTemp',(temp>=0?'+':'')+temp.toFixed(1)+' °C');
       const b=document.getElementById('tempBadge');
-      if(b){b.textContent=Math.abs(temp)<=0.5?'Normal':'Elevated'; b.className='vital-badge '+(Math.abs(temp)<=0.5?'good':'warn');}
+      if(b){b.textContent=Math.abs(temp)<=0.5?'Normal':'Elevated';b.className='vital-badge '+(Math.abs(temp)<=0.5?'good':'warn');}
     }
   }
 
-  function renderWeeklyCalories(calD){
-    if (!calD?.rollupValues) return;
-    const entries = calD.rollupDataPoints.slice(-7);
-    const labels  = entries.map(e=>{
-      const cd=e.civilStartTime?.date;
-      if(!cd) return '?';
-      return ['S','M','T','W','T','F','S'][new Date(cd.year,cd.month-1,cd.day).getDay()];
-    });
-    const values  = entries.map(e=>Math.round(parseFloat(e.activeEnergyBurned?.kilocalories??e.activeEnergyBurned?.value??0)));
-    const [ty2,tm2,tday2] = localDate().split('-').map(Number);
-    const colors  = entries.map(e=>{ const cd=e.civilStartTime?.date; return (cd&&cd.year===ty2&&cd.month===tm2&&cd.day===tday2)?'#D85A30':'#F0997B'; });
+  function renderWeeklyCalories(calD, t) {
+    if(!calD?.rollupDataPoints) return;
+    const pts=calD.rollupDataPoints.slice(-7);
+    const labels=pts.map(p=>{ const cd=p.civilStartTime?.date; return cd?['S','M','T','W','T','F','S'][new Date(cd.year,cd.month-1,cd.day).getDay()]:'?'; });
+    const values=pts.map(p=>Math.round(parseFloat(p.totalCalories?.kilocalories??0)));
+    const [ty,tm,td]=t.split('-').map(Number);
+    const colors=pts.map(p=>{ const cd=p.civilStartTime?.date; return cd&&cd.year===ty&&cd.month===tm&&cd.day===td?'#D85A30':'#F0997B'; });
     const nz=values.filter(v=>v>0);
-    setText('calAvg',   (nz.length?Math.round(nz.reduce((a,b)=>a+b,0)/nz.length):0).toLocaleString()+' kcal');
+    setText('calAvg',  (nz.length?Math.round(nz.reduce((a,b)=>a+b,0)/nz.length):0).toLocaleString()+' kcal');
     setText('calTotal', nz.reduce((a,b)=>a+b,0).toLocaleString()+' kcal');
-    if (calChart) calChart.destroy();
-    calChart = new Chart(document.getElementById('calChart'),{
-      type:'bar', data:{labels, datasets:[{data:values, backgroundColor:colors, borderRadius:4, borderSkipped:false}]},
-      options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>c.parsed.y.toLocaleString()+' kcal'}}}, scales:{x:{grid:{display:false},ticks:{color:'#888780',font:{size:11}}}, y:{display:false}}}
+    if(calChart) calChart.destroy();
+    calChart=new Chart(document.getElementById('calChart'),{
+      type:'bar', data:{labels,datasets:[{data:values,backgroundColor:colors,borderRadius:4,borderSkipped:false}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y.toLocaleString()+' kcal'}}},scales:{x:{grid:{display:false},ticks:{color:'#888780',font:{size:11}}},y:{display:false}}}
     });
   }
 
-  function renderBody(weightD, fatD){
-    const wPt=getRollup(weightD), fPt=getRollup(fatD);
-    const w=parseFloat(wPt?.weight?.kilograms??wPt?.weight?.value??0)||null;
-    const f=parseFloat(fPt?.bodyFat?.percentage??fPt?.bodyFat?.value??0)||null;
-    if(w) setText('weight', w.toFixed(1));
-    if(f) setText('bodyFat', f.toFixed(1));
+  function renderBody(weightD, fatD, t) {
+    const wp=getToday(weightD,t)??weightD?.rollupDataPoints?.[0];
+    const fp=getToday(fatD,t)??fatD?.rollupDataPoints?.[0];
+    const w=parseFloat(wp?.weight?.kilogramsAverage??wp?.weight?.kilograms??0)||null;
+    const f=parseFloat(fp?.bodyFat?.percentageAverage??fp?.bodyFat?.percentage??0)||null;
+    if(w) setText('weight',w.toFixed(1));
+    if(f) setText('bodyFat',f.toFixed(1));
   }
 
-  function renderInsight(stepsD, sleepD){
-    const stepsRp=getRollup(stepsD); const steps=parseInt(stepsRp?.steps?.countSum??stepsRp?.steps?.count??0), goal=10000;
-    let msg = steps>=goal
-      ? `<strong>Goal crushed!</strong> You've already hit your ${goal.toLocaleString()} step goal today!`
-      : `<strong>Almost there!</strong> You need ${(goal-steps).toLocaleString()} more steps — about ${Math.round((goal-steps)/1300)} minutes of walking.`;
-    const pt=sleepD?.dataPoints?.[0];
-    if((pt?.start_time??pt?.startTime)&&(pt?.end_time??pt?.endTime)){
-      const mins=(new Date(pt.end_time ?? pt.endTime)-new Date(pt.start_time ?? pt.startTime))/(1000*60);
-      if(mins>=420) msg+=' Great sleep last night too — well recovered!';
-      else if(mins>0&&mins<360) msg+=' Your sleep was a bit short — aim for 7–8 hours tonight.';
-    }
+  function renderInsight(d, t) {
+    const sp=getToday(d['steps (today)'],t);
+    const steps=parseInt(sp?.steps?.countSum??0), goal=10000;
+    let msg=steps>=goal
+      ?`<strong>Goal crushed!</strong> You've already hit your ${goal.toLocaleString()} step goal today!`
+      :`<strong>Almost there!</strong> You need ${(goal-steps).toLocaleString()} more steps — about ${Math.round((goal-steps)/1300)} minutes of walking.`;
+    const sl=d['sleep']?.dataPoints?.find(p=>p.sleep?.metadata?.main===true)??d['sleep']?.dataPoints?.[0];
+    const mins=sl?.sleep?.summary?parseInt(sl.sleep.summary.minutesAsleep??0):0;
+    if(mins>=420) msg+=' Great sleep last night too — well recovered!';
+    else if(mins>0&&mins<360) msg+=' Your sleep last night was a bit short — aim for 7–8 hours tonight.';
     document.getElementById('insightText').innerHTML=msg;
   }
 
@@ -683,15 +625,15 @@
   function initTheme(){
     const saved=localStorage.getItem('theme');
     if(saved) document.body.classList.add(saved);
-    const btn=document.getElementById('themeToggle'), icon=document.getElementById('themeIcon');
+    const btn=document.getElementById('themeToggle'),icon=document.getElementById('themeIcon');
     if(!btn) return;
-    const isDark=document.body.classList.contains('dark')||(!saved&&window.matchMedia('(prefers-color-scheme:dark)').matches);
-    if(icon) icon.className=isDark?'fas fa-sun':'fas fa-moon';
+    const dark=document.body.classList.contains('dark')||(!saved&&window.matchMedia('(prefers-color-scheme:dark)').matches);
+    if(icon) icon.className=dark?'fas fa-sun':'fas fa-moon';
     btn.onclick=()=>{ const nd=document.body.classList.toggle('dark'); document.body.classList.toggle('light',!nd); if(icon) icon.className=nd?'fas fa-sun':'fas fa-moon'; localStorage.setItem('theme',nd?'dark':'light'); };
   }
 
   // ── INIT ──────────────────────────────────────────────
-  document.addEventListener('DOMContentLoaded', ()=>{
+  document.addEventListener('DOMContentLoaded',()=>{
     initTheme();
     document.getElementById('dateBadge').textContent=new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
     maybeHandleCallback();
