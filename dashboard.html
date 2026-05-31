@@ -304,25 +304,46 @@
     }
   }
 
-  // dailyRollUp POST
+  // Build the nested civil time range object the API actually wants
+  function civilRange(startDate, endDate) {
+    function parseDateParts(d) {
+      const [y,m,day] = d.split('-').map(Number);
+      return { date: { year:y, month:m, day }, time: { hours:0, minutes:0, seconds:0, nanos:0 } };
+    }
+    function endDateParts(d) {
+      const [y,m,day] = d.split('-').map(Number);
+      return { date: { year:y, month:m, day }, time: { hours:23, minutes:59, seconds:59, nanos:0 } };
+    }
+    return { start: parseDateParts(startDate), end: endDateParts(endDate) };
+  }
+
+  // dailyRollUp POST — correct body format per API docs
   async function rollUp(dataType, startDate, endDate){
+    const numDays = Math.max(1, Math.round((new Date(endDate) - new Date(startDate)) / 86400000) + 1);
     return healthFetch(`/users/-/dataTypes/${dataType}/dataPoints:dailyRollUp`, {
       method:'POST',
-      body: JSON.stringify({ start_date: startDate, end_date: endDate })
+      body: JSON.stringify({ range: civilRange(startDate, endDate), windowSizeDays: 1 })
     });
   }
 
-  // list GET
-  async function listPoints(dataType, startTime, endTime){
-    const p = new URLSearchParams({ start_time: startTime, end_time: endTime });
-    return healthFetch(`/users/-/dataTypes/${dataType}/dataPoints?${p}`);
+  // list GET — use filter param per API docs
+  async function listPoints(dataType, dateStr){
+    const filter = encodeURIComponent(`${dataType.replace(/-/g,'_')}.interval.civil_start_time >= "${dateStr}T00:00:00" AND ${dataType.replace(/-/g,'_')}.interval.civil_start_time <= "${dateStr}T23:59:59"`);
+    return healthFetch(`/users/-/dataTypes/${dataType}/dataPoints?filter=${filter}`);
   }
 
-  // Extract today's rollup value from response
+  // Extract today's rollup datapoint from response
+  // API returns { rollupDataPoints: [{ civilStartTime: { date: {year,month,day} }, steps: {...}, ... }] }
   function getRollup(data, date){
-    if (!data?.rollupValues?.length) return null;
+    if (!data?.rollupDataPoints?.length) return null;
     const d = date || localDate();
-    return (data.rollupValues.find(r=>r.date===d) ?? data.rollupValues[data.rollupValues.length-1])?.value ?? null;
+    const [ty,tm,tday] = d.split('-').map(Number);
+    const pt = data.rollupDataPoints.find(r => {
+      const rd = r.civilStartTime?.date;
+      return rd && rd.year===ty && rd.month===tm && rd.day===tday;
+    }) ?? data.rollupDataPoints[data.rollupDataPoints.length-1];
+    // Return the datapoint itself — callers will pick the right field
+    return pt ?? null;
   }
 
   // ── OAUTH CALLBACK ────────────────────────────────────
@@ -377,12 +398,12 @@
 
     const t  = localDate();
     const t6 = localDate(6);
-    const startOfDay = t + 'T00:00:00Z';
-    const endOfDay   = t + 'T23:59:59Z';
+
+
 
     setStatus('Fetching profile…');
     const results = await Promise.all([
-      safe('profile',            ()=>healthFetch('/users/-/profile')),
+      safe('profile',            ()=>healthFetch('/users/me/identity')),
       safe('steps (today)',      ()=>rollUp('steps', t, t)),
       safe('steps (7d)',         ()=>rollUp('steps', t6, t)),
       safe('active-energy',      ()=>rollUp('active-energy-burned', t, t)),
@@ -396,7 +417,7 @@
       safe('spo2',               ()=>rollUp('daily-oxygen-saturation', t, t)),
       safe('breathing-rate',     ()=>rollUp('daily-respiratory-rate', t, t)),
       safe('skin-temp',          ()=>rollUp('daily-sleep-temperature-derivations', t, t)),
-      safe('sleep',              ()=>listPoints('sleep', startOfDay, endOfDay)),
+      safe('sleep',              ()=>listPoints('sleep', t)),
       safe('weight',             ()=>rollUp('weight', t, t)),
       safe('body-fat',           ()=>rollUp('body-fat', t, t)),
     ]);
@@ -465,17 +486,24 @@
 
   function renderProfile(p){
     if (!p) return;
-    const name = p.displayName || p.givenName || 'You';
+    // identity endpoint returns { legacyUserId, healthUserId } — no display name
+    // Fall back to showing the legacy user ID or 'You'
+    const name = p.displayName || p.givenName || p.legacyUserId || 'You';
     setText('userName', name);
     document.getElementById('userAvatar').textContent = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   }
 
   function renderActivity(stepsD, calD, activeD, distD, floorsD){
-    const steps  = getRollup(stepsD)?.steps   ?? 0;
-    const cal    = Math.round(getRollup(calD)?.kilocalories ?? 0);
-    const active = Math.round(getRollup(activeD)?.minutes   ?? 0);
-    const distMm = getRollup(distD)?.millimeters ?? 0;
-    const floors = Math.round(getRollup(floorsD)?.floors    ?? 0);
+    const sr = getRollup(stepsD);
+    const steps  = parseInt(sr?.steps?.countSum ?? sr?.steps?.count ?? 0);
+    const cr = getRollup(calD);
+    const cal    = Math.round(parseFloat(cr?.activeEnergyBurned?.kilocalories ?? cr?.activeEnergyBurned?.value ?? 0));
+    const ar = getRollup(activeD);
+    const active = Math.round(parseFloat(ar?.activeMinutes?.minutes ?? ar?.activeMinutes?.count ?? 0));
+    const dr = getRollup(distD);
+    const distMm = parseFloat(dr?.distance?.millimeters ?? dr?.distance?.value ?? 0);
+    const fr = getRollup(floorsD);
+    const floors = Math.round(parseFloat(fr?.floors?.countSum ?? fr?.floors?.count ?? 0));
 
     setText('steps',    steps.toLocaleString());
     setText('calories', cal.toLocaleString());
@@ -500,11 +528,20 @@
 
   function renderWeeklySteps(ws){
     if (!ws?.rollupValues) return;
-    const entries = ws.rollupValues.slice(-7);
-    const labels  = entries.map(e=>{ const d=new Date(e.date+'T12:00:00'); return ['S','M','T','W','T','F','S'][d.getDay()]; });
-    const values  = entries.map(e=>e.value?.steps??0);
-    const today   = localDate();
-    const colors  = entries.map((e,i)=>e.date===today?'#1D9E75':values[i]>=10000?'#5DCAA5':'#9FE1CB');
+    const entries = ws.rollupDataPoints.slice(-7);
+    const labels  = entries.map(e=>{
+      const cd = e.civilStartTime?.date;
+      if(!cd) return '?';
+      const d = new Date(cd.year, cd.month-1, cd.day);
+      return ['S','M','T','W','T','F','S'][d.getDay()];
+    });
+    const values  = entries.map(e=>parseInt(e.steps?.countSum ?? e.steps?.count ?? 0));
+    const [ty,tm,tday] = localDate().split('-').map(Number);
+    const colors  = entries.map((e,i)=>{
+      const cd=e.civilStartTime?.date;
+      const isToday = cd && cd.year===ty && cd.month===tm && cd.day===tday;
+      return isToday?'#1D9E75':values[i]>=10000?'#5DCAA5':'#9FE1CB';
+    });
     if (stepsChart) stepsChart.destroy();
     stepsChart = new Chart(document.getElementById('stepsChart'),{
       type:'bar', data:{labels, datasets:[{data:values, backgroundColor:colors, borderRadius:4, borderSkipped:false}]},
@@ -513,10 +550,13 @@
   }
 
   function renderHRZones(zonesD, restingD, hrvD, spo2D){
-    const rhr  = getRollup(restingD)?.beatsPerMinute;
-    const hrv  = getRollup(hrvD)?.milliseconds;
-    const spo2 = getRollup(spo2D)?.percent;
-    const z    = getRollup(zonesD);
+    const rhrPt = getRollup(restingD);
+    const rhr  = parseFloat(rhrPt?.dailyRestingHeartRate?.beatsPerMinute ?? rhrPt?.dailyRestingHeartRate?.value ?? 0) || null;
+    const hrvPt = getRollup(hrvD);
+    const hrv  = parseFloat(hrvPt?.dailyHeartRateVariability?.milliseconds ?? hrvPt?.dailyHeartRateVariability?.value ?? 0) || null;
+    const spo2Pt = getRollup(spo2D);
+    const spo2 = parseFloat(spo2Pt?.dailyOxygenSaturation?.percent ?? spo2Pt?.dailyOxygenSaturation?.value ?? 0) || null;
+    const z    = getRollup(zonesD)?.dailyHeartRateZones ?? getRollup(zonesD);
 
     if (rhr){ setText('restingHR',Math.round(rhr)); setText('heartRate',Math.round(rhr)+' bpm'); }
     if (hrv)  setText('hrv', Math.round(hrv));
@@ -528,10 +568,10 @@
         if(bar) bar.style.width=Math.round((mins/max)*100)+'%';
         if(el)  el.textContent=mins<60?`${mins}m`:`${Math.floor(mins/60)}h ${mins%60}m`;
       };
-      setZ('zPeak',  'zPeakMin',   z.peakMinutes??0,       60);
-      setZ('zCardio','zCardioMin', z.cardioMinutes??0,      90);
-      setZ('zFat',   'zFatMin',    z.fatBurnMinutes??0,    120);
-      setZ('zRest',  'zRestMin',   z.outOfRangeMinutes??0, 1440);
+      setZ('zPeak',  'zPeakMin',   parseInt(z.peakMinutes??z.zones?.find(zn=>zn.name==='PEAK')?.minutes??0),       60);
+      setZ('zCardio','zCardioMin', parseInt(z.cardioMinutes??z.zones?.find(zn=>zn.name==='CARDIO')?.minutes??0),      90);
+      setZ('zFat',   'zFatMin',    parseInt(z.fatBurnMinutes??z.zones?.find(zn=>zn.name==='FAT_BURN')?.minutes??0),    120);
+      setZ('zRest',  'zRestMin',   parseInt(z.outOfRangeMinutes??z.zones?.find(zn=>zn.name==='OUT_OF_RANGE')?.minutes??0), 1440);
     }
 
     if (rhr){ const b=document.getElementById('hrBadge'); if(b){b.textContent=rhr<60?'Low':rhr<=100?'Normal':'High'; b.className='vital-badge '+(rhr>=60&&rhr<=100?'good':'warn');} }
@@ -542,36 +582,52 @@
     const points = sleepD?.dataPoints;
     if (!points?.length) return;
     const main = points[0];
-    if (!(main?.start_time ?? main?.startTime) || !(main?.end_time ?? main?.endTime)) return;
+    const _st = (main?.sleep??main)?.interval?.startTime ?? main?.start_time ?? main?.startTime;
+    const _et = (main?.sleep??main)?.interval?.endTime   ?? main?.end_time   ?? main?.endTime;
+    if (!_st && totalMins === 0) return; // no usable time data
 
     const fmt = s=>new Date(s).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
-    setText('sleepTime', `${fmt(main.start_time ?? main.startTime)} – ${fmt(main.end_time ?? main.endTime)}`);
-
-    const totalMins = (new Date(main.end_time ?? main.endTime)-new Date(main.start_time ?? main.startTime))/(1000*60);
-    const levels = main.value?.sleepLevels ?? main.sleepLevels ?? [];
-    const awakeMins = levels.filter(l=>['WAKE','AWAKE'].includes(l.level?.toUpperCase())).reduce((a,l)=>a+(l.seconds||0)/60,0);
-    const remMins   = levels.filter(l=>l.level?.toUpperCase()==='REM').reduce((a,l)=>a+(l.seconds||0)/60,0);
-    const sleepMins = Math.max(0, Math.round(totalMins - awakeMins));
+    const sleepObj = main.sleep ?? main;
+    const startT = sleepObj.interval?.startTime ?? main.start_time ?? main.startTime;
+    const endT   = sleepObj.interval?.endTime   ?? main.end_time   ?? main.endTime;
+    if(startT && endT) setText('sleepTime', `${fmt(startT)} – ${fmt(endT)}`);
+    const totalMins = startT && endT ? (new Date(endT)-new Date(startT))/(1000*60) : 0;
+    // API response: sleep.stages[] with {startTime,endTime,type} and sleep.summary
+    const sleepData = main.sleep ?? main;
+    const summary = sleepData.summary;
+    const stages = sleepData.stages ?? [];
+    const stageSecs = (type) => stages.filter(s=>s.type===type).reduce((a,s)=>{
+      if(!s.startTime||!s.endTime) return a;
+      return a + (new Date(s.endTime)-new Date(s.startTime))/1000;
+    },0);
+    const levels = stages.map(s=>({level:s.type, seconds: s.startTime&&s.endTime?(new Date(s.endTime)-new Date(s.startTime))/1000:0}));
+    const awakeMins = summary ? parseInt(summary.minutesAwake??0) : stageSecs('AWAKE')/60;
+    const remMins   = summary ? parseInt(summary.stagesSummary?.find(s=>s.type==='REM')?.minutes??0) : stageSecs('REM')/60;
+    const asleepMins = summary ? parseInt(summary.minutesAsleep??0) : Math.max(0,Math.round(totalMins-awakeMins));
+    const sleepMins = asleepMins || Math.max(0, Math.round(totalMins - awakeMins));
 
     setText('sleepTotal',      minsToHM(sleepMins));
+    setText('sleepEfficiency', summary ? Math.round((sleepMins/Math.max(1,totalMins))*100) : (totalMins>0?Math.round((sleepMins/totalMins)*100):'–'));
     setText('sleepREM',        minsToHM(Math.round(remMins)));
-    setText('sleepEfficiency', totalMins>0 ? Math.round((sleepMins/totalMins)*100) : '–');
 
     const cont = document.getElementById('sleepStages'); cont.innerHTML='';
     const colors={WAKE:'#85B7EB',AWAKE:'#85B7EB',LIGHT:'#378ADD',DEEP:'#185FA5',REM:'#7F77DD',N1:'#9FE1CB',N2:'#378ADD',N3:'#185FA5'};
-    const totalSecs = levels.reduce((a,l)=>a+(l.seconds||0),0)||1;
-    levels.forEach(seg=>{
+    const stagesToDraw = stages.length ? stages : levels;
+    const totalSecs = stagesToDraw.reduce((a,l)=>a+(l.seconds||0),0)||1;
+    stagesToDraw.forEach(seg=>{
       const div=document.createElement('div'); div.className='stage-seg';
       div.style.flex=((seg.seconds||0)/totalSecs*100).toFixed(1);
-      div.style.background=colors[seg.level?.toUpperCase()]||'#85B7EB';
+      div.style.background=colors[(seg.type??seg.level)?.toUpperCase()]||'#85B7EB';
       div.style.borderRadius='3px';
       cont.appendChild(div);
     });
   }
 
   function renderVitals(restingD, spo2D, brD, tempD){
-    const br   = getRollup(brD)?.breathsPerMinute;
-    const temp = getRollup(tempD)?.celsiusDegrees;
+    const brPt = getRollup(brD);
+    const br   = parseFloat(brPt?.dailyRespiratoryRate?.breathsPerMinute ?? brPt?.dailyRespiratoryRate?.value ?? 0) || null;
+    const tempPt = getRollup(tempD);
+    const temp = parseFloat(tempPt?.dailySleepTemperatureDerivations?.celsiusDegrees ?? tempPt?.dailySleepTemperatureDerivations?.value ?? 0) || null;
     if (br)   setText('breathRate', Math.round(br)+' /min');
     if (temp!=null){
       setText('skinTemp',(temp>=0?'+':'')+Number(temp).toFixed(1)+' °C');
@@ -582,11 +638,15 @@
 
   function renderWeeklyCalories(calD){
     if (!calD?.rollupValues) return;
-    const entries = calD.rollupValues.slice(-7);
-    const labels  = entries.map(e=>{ const d=new Date(e.date+'T12:00:00'); return ['S','M','T','W','T','F','S'][d.getDay()]; });
-    const values  = entries.map(e=>Math.round(e.value?.kilocalories??0));
-    const today   = localDate();
-    const colors  = entries.map(e=>e.date===today?'#D85A30':'#F0997B');
+    const entries = calD.rollupDataPoints.slice(-7);
+    const labels  = entries.map(e=>{
+      const cd=e.civilStartTime?.date;
+      if(!cd) return '?';
+      return ['S','M','T','W','T','F','S'][new Date(cd.year,cd.month-1,cd.day).getDay()];
+    });
+    const values  = entries.map(e=>Math.round(parseFloat(e.activeEnergyBurned?.kilocalories??e.activeEnergyBurned?.value??0)));
+    const [ty2,tm2,tday2] = localDate().split('-').map(Number);
+    const colors  = entries.map(e=>{ const cd=e.civilStartTime?.date; return (cd&&cd.year===ty2&&cd.month===tm2&&cd.day===tday2)?'#D85A30':'#F0997B'; });
     const nz=values.filter(v=>v>0);
     setText('calAvg',   (nz.length?Math.round(nz.reduce((a,b)=>a+b,0)/nz.length):0).toLocaleString()+' kcal');
     setText('calTotal', nz.reduce((a,b)=>a+b,0).toLocaleString()+' kcal');
@@ -598,13 +658,15 @@
   }
 
   function renderBody(weightD, fatD){
-    const w=getRollup(weightD)?.kilograms, f=getRollup(fatD)?.percent;
-    if(w) setText('weight', Number(w).toFixed(1));
-    if(f) setText('bodyFat', Number(f).toFixed(1));
+    const wPt=getRollup(weightD), fPt=getRollup(fatD);
+    const w=parseFloat(wPt?.weight?.kilograms??wPt?.weight?.value??0)||null;
+    const f=parseFloat(fPt?.bodyFat?.percentage??fPt?.bodyFat?.value??0)||null;
+    if(w) setText('weight', w.toFixed(1));
+    if(f) setText('bodyFat', f.toFixed(1));
   }
 
   function renderInsight(stepsD, sleepD){
-    const steps=getRollup(stepsD)?.steps??0, goal=10000;
+    const stepsRp=getRollup(stepsD); const steps=parseInt(stepsRp?.steps?.countSum??stepsRp?.steps?.count??0), goal=10000;
     let msg = steps>=goal
       ? `<strong>Goal crushed!</strong> You've already hit your ${goal.toLocaleString()} step goal today!`
       : `<strong>Almost there!</strong> You need ${(goal-steps).toLocaleString()} more steps — about ${Math.round((goal-steps)/1300)} minutes of walking.`;
